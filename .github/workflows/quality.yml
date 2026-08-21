@@ -1,0 +1,32 @@
+name: Quality
+
+on:
+  pull_request:
+  push:
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        php: ['8.3']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: dom
+          coverage: none
+      - uses: ramsey/composer-install@v3
+        with:
+          working-directory: packages/laravel-dwg-converter
+      - run: composer validate --strict
+        working-directory: packages/laravel-dwg-converter
+      - run: vendor/bin/pint --test
+        working-directory: packages/laravel-dwg-converter
+      - run: vendor/bin/phpstan analyse
+        working-directory: packages/laravel-dwg-converter
+      - run: vendor/bin/pest
+        working-directory: packages/laravel-dwg-converter
+      - run: composer audit
+        working-directory: packages/laravel-dwg-converter
