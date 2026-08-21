@@ -35,7 +35,6 @@ final class DwgConverterServiceProvider extends ServiceProvider
     /**
      * Register the publishable package configuration.
      */
-    #[Override]
     public function boot(): void
     {
         $this->publishes([
