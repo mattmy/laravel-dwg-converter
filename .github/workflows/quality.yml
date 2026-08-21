@@ -18,15 +18,8 @@ jobs:
           extensions: dom
           coverage: none
       - uses: ramsey/composer-install@v3
-        with:
-          working-directory: packages/laravel-dwg-converter
       - run: composer validate --strict
-        working-directory: packages/laravel-dwg-converter
       - run: vendor/bin/pint --test
-        working-directory: packages/laravel-dwg-converter
       - run: vendor/bin/phpstan analyse
-        working-directory: packages/laravel-dwg-converter
       - run: vendor/bin/pest
-        working-directory: packages/laravel-dwg-converter
       - run: composer audit
-        working-directory: packages/laravel-dwg-converter
