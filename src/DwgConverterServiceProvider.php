@@ -25,6 +25,8 @@ final class DwgConverterServiceProvider extends ServiceProvider
         $this->mergeConfigFrom(__DIR__ . '/../config/dwg-converter.php', 'dwg-converter');
         $this->app->singleton(ProcessRunner::class, SymfonyProcessRunner::class);
         $this->app->singleton(Converter::class, function (Application $app): Converter {
+            /** @var ProcessRunner $processRunner */
+            $processRunner = $app->make(ProcessRunner::class);
             $configured = config('dwg-converter');
             $configuration = [];
             if (\is_array($configured)) {
@@ -36,7 +38,7 @@ final class DwgConverterServiceProvider extends ServiceProvider
             }
 
             return new Converter(
-                $app->make(ProcessRunner::class),
+                $processRunner,
                 $configuration,
             );
         });

@@ -20,7 +20,10 @@ it('registers its manager, defaults, and publishable configuration', function ()
         throw new RuntimeException('The package configuration publish destination is invalid.');
     }
 
-    expect(app(DwgManager::class))->toBeInstanceOf(DwgManager::class)
+    /** @var DwgManager $manager */
+    $manager = app(DwgManager::class);
+
+    expect($manager)->toBeInstanceOf(DwgManager::class)
         ->and(config('dwg-converter.timeout'))->toBe(60)
         ->and($published)->toHaveCount(1)
         ->and(\basename($source))->toBe('dwg-converter.php')

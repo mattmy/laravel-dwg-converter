@@ -6,9 +6,7 @@ use Mattmy\DwgConverter\DwgBinary;
 use Mattmy\DwgConverter\Exceptions\InvalidDwg;
 use Mattmy\DwgConverter\Facades\Dwg;
 use Mattmy\DwgConverter\Internal\ProcessRunner;
-use Mattmy\DwgConverter\Internal\Workspace;
-
-use function Pest\Laravel\mock;
+use Mattmy\DwgConverter\Tests\Fakes\FakeProcessRunner;
 
 it('binds the source before thumbnail extraction', function (): void {
     expect(fn () => Dwg::thumbnail('relative.dwg')->extract())
@@ -18,18 +16,10 @@ it('binds the source before thumbnail extraction', function (): void {
 it('extracts a thumbnail through the public interface', function (): void {
     config()->set('dwg-converter.temporary_directory', storage_path('framework/dwg-converter-tests'));
 
-    $runner = mock(ProcessRunner::class);
-    $runner->shouldReceive('assertAvailable')->andReturnNull();
-    $runner->shouldReceive('run')->andReturnUsing(function (array $_command, Workspace $workspace): void {
-        $written = \file_put_contents(
-            $workspace->outputPath('input.png'),
-            "\x89PNG\r\n\x1a\n" . \str_repeat("\0", 12) . "\0\0\0\0IEND\xaeB`\x82",
-        );
-
-        if ($written === false) {
-            throw new RuntimeException('Unable to write the thumbnail fixture.');
-        }
-    });
+    $runner = FakeProcessRunner::writesFile(
+        'input.png',
+        "\x89PNG\r\n\x1a\n" . \str_repeat("\0", 12) . "\0\0\0\0IEND\xaeB`\x82",
+    );
     app()->instance(ProcessRunner::class, $runner);
 
     $thumbnail = Dwg::thumbnail(DwgBinary::from('AC1032 fixture'))->extract();

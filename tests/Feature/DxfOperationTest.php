@@ -19,7 +19,7 @@ it('passes each approved DXF version as an isolated argv value', function (DxfVe
     Dwg::toDxf(DwgBinary::from('AC1032 drawing'))->toVersion($version)->convert()->output();
 
     expect(\array_slice($runner->commands[0], 1, 2))->toBe(['--as', $version->value]);
-})->with(DxfVersion::cases());
+})->with(\array_map(static fn (DxfVersion $version): array => [$version], DxfVersion::cases()));
 
 it('uses the LibreDWG default version unless explicitly configured', function (): void {
     $runner = FakeProcessRunner::writesFile(
