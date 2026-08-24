@@ -17,6 +17,9 @@ use Throwable;
 final class DwgOutput
 {
     private const string READY = 'ready';
+
+    private const string CONSUMING = 'consuming';
+
     private const string CONSUMED = 'consumed';
 
     private string $state = self::READY;
@@ -61,14 +64,16 @@ final class DwgOutput
      * Read all output bytes and then remove the private artifact.
      *
      * @throws DwgOperationFailed
+     * @throws LogicException
      */
     public function output(): string
     {
         $this->beginConsumption();
+
         try {
             $this->assertOutputFile();
             $contents = \file_get_contents($this->path);
-            if (!\is_string($contents)) {
+            if (! \is_string($contents)) {
                 throw new DwgOperationFailed('output_missing', ['operation' => $this->operation]);
             }
 
@@ -82,12 +87,14 @@ final class DwgOutput
      * Stream the output to a Laravel disk and then remove the private artifact.
      *
      * @throws DwgOperationFailed
+     * @throws LogicException
      */
     public function storeAs(string $path, string $name, ?string $disk = null): string
     {
-        $this->validateStorageDestination($path, $name);
         $this->beginConsumption();
+
         try {
+            $this->validateStorageDestination($path, $name);
             $this->assertOutputFile();
             $stored = Storage::disk($disk)->putFileAs($path, new File($this->path), $name);
             if ($stored === false) {
@@ -106,6 +113,8 @@ final class DwgOutput
 
     /**
      * Transition from ready to the terminal consumption phase.
+     *
+     * @throws LogicException
      */
     private function beginConsumption(): void
     {
@@ -113,7 +122,7 @@ final class DwgOutput
             throw new LogicException('This DWG output has already been consumed.');
         }
 
-        $this->state = self::CONSUMED;
+        $this->state = self::CONSUMING;
     }
 
     /**
@@ -123,7 +132,7 @@ final class DwgOutput
      */
     private function assertOutputFile(): void
     {
-        if (!\is_file($this->path) || !\is_readable($this->path)) {
+        if (! $this->workspace->owns($this->path) || ! \is_file($this->path) || ! \is_readable($this->path)) {
             throw new DwgOperationFailed('output_missing', ['operation' => $this->operation]);
         }
 
@@ -144,9 +153,17 @@ final class DwgOutput
      */
     private function validateStorageDestination(string $path, string $name): void
     {
-        $hasUnsafePath = \str_contains($path, "\0") || \str_starts_with($path, '/') || \str_starts_with($path, '\\')
-            || \str_contains($path, '\\') || \in_array('..', \explode('/', $path), true);
-        if ($hasUnsafePath || \str_contains($name, "\0") || \basename($name) !== $name) {
+        $hasUnsafePath = \str_contains($path, "\0")
+            || \str_starts_with($path, '/')
+            || \str_starts_with($path, '\\')
+            || \str_contains($path, '\\')
+            || \preg_match('/^[A-Za-z]:/', $path) === 1
+            || \in_array('..', \explode('/', $path), true);
+        $hasUnsafeName = $name === ''
+            || \str_contains($name, "\0")
+            || \str_contains($name, '/')
+            || \str_contains($name, '\\');
+        if ($hasUnsafePath || $hasUnsafeName) {
             throw new DwgOperationFailed('storage_failed', ['operation' => $this->operation]);
         }
 
@@ -160,6 +177,10 @@ final class DwgOutput
      */
     private function finishConsumption(): void
     {
-        $this->workspace->cleanup();
+        try {
+            $this->workspace->cleanup();
+        } finally {
+            $this->state = self::CONSUMED;
+        }
     }
 }

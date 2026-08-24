@@ -20,8 +20,6 @@ final class Workspace
 
     /**
      * Create a workspace rooted at a trusted temporary directory.
-     *
-     * @throws DwgOperationFailed
      */
     private function __construct(private readonly string $directory) {}
 
@@ -37,11 +35,11 @@ final class Workspace
         int $maxInputBytes,
         string $operation,
     ): self {
-        if (!self::isAbsolutePath($temporaryDirectory) || $maxInputBytes < 1) {
+        if (! self::isAbsolutePath($temporaryDirectory) || $maxInputBytes < 1) {
             throw new DwgOperationFailed('invalid_configuration', ['operation' => $operation]);
         }
 
-        if (!\is_dir($temporaryDirectory) && !\mkdir($temporaryDirectory, 0700, true) && !\is_dir($temporaryDirectory)) {
+        if (! \is_dir($temporaryDirectory) && ! \mkdir($temporaryDirectory, 0700, true) && ! \is_dir($temporaryDirectory)) {
             throw new DwgOperationFailed('invalid_configuration', ['operation' => $operation]);
         }
 
@@ -51,7 +49,7 @@ final class Workspace
             throw new DwgOperationFailed('invalid_configuration', ['operation' => $operation], $exception);
         }
 
-        if (!\mkdir($directory, 0700)) {
+        if (! \mkdir($directory, 0700)) {
             throw new DwgOperationFailed('input_snapshot_failed', ['operation' => $operation]);
         }
 
@@ -93,32 +91,68 @@ final class Workspace
     }
 
     /**
+     * Determine whether an existing path is owned by this workspace.
+     */
+    public function owns(string $path): bool
+    {
+        $directory = \realpath($this->directory);
+        $realPath = \realpath($path);
+
+        return \is_string($directory)
+            && \is_string($realPath)
+            && \str_starts_with($realPath, $directory . DIRECTORY_SEPARATOR);
+    }
+
+    /**
      * Delete only this package-owned workspace.
      */
     public function cleanup(): void
     {
-        if ($this->cleaned || !\is_dir($this->directory)) {
+        if ($this->cleaned) {
             $this->cleaned = true;
 
             return;
         }
 
-        $items = \scandir($this->directory);
+        if (\is_link($this->directory)) {
+            \unlink($this->directory);
+            $this->cleaned = true;
+
+            return;
+        }
+
+        if (! \is_dir($this->directory)) {
+            $this->cleaned = true;
+
+            return;
+        }
+
+        $this->removeDirectory($this->directory);
+        $this->cleaned = true;
+    }
+
+    /**
+     * Remove a package-owned directory without following symbolic links.
+     */
+    private function removeDirectory(string $directory): void
+    {
+        $items = \scandir($directory);
         if ($items !== false) {
             foreach ($items as $item) {
                 if ($item === '.' || $item === '..') {
                     continue;
                 }
 
-                $path = $this->directory . DIRECTORY_SEPARATOR . $item;
-                if (\is_file($path) || \is_link($path)) {
+                $path = $directory . DIRECTORY_SEPARATOR . $item;
+                if (\is_dir($path) && ! \is_link($path)) {
+                    $this->removeDirectory($path);
+                } else {
                     \unlink($path);
                 }
             }
         }
 
-        \rmdir($this->directory);
-        $this->cleaned = true;
+        \rmdir($directory);
     }
 
     /**
@@ -139,7 +173,7 @@ final class Workspace
         }
 
         $header = \file_get_contents($this->inputPath(), false, null, 0, 6);
-        if (!\is_string($header) || \preg_match('/^AC10[0-9]{2}$/', $header) !== 1) {
+        if (! \is_string($header) || \preg_match('/^AC10[0-9]{2}$/', $header) !== 1) {
             throw new InvalidDwg('invalid_dwg_header', ['operation' => $operation]);
         }
     }
@@ -151,12 +185,12 @@ final class Workspace
      */
     private function uploadedPath(UploadedFile $source, string $operation): string
     {
-        if (!$source->isValid()) {
+        if (! $source->isValid()) {
             throw new InvalidDwg('invalid_upload', ['operation' => $operation]);
         }
 
         $path = $source->getRealPath();
-        if (!\is_string($path)) {
+        if (! \is_string($path)) {
             throw new InvalidDwg('invalid_upload', ['operation' => $operation]);
         }
 
@@ -170,7 +204,7 @@ final class Workspace
      */
     private function localPath(string $path, string $operation): string
     {
-        if (!self::isAbsolutePath($path)) {
+        if (! self::isAbsolutePath($path)) {
             throw new InvalidDwg('input_not_absolute', ['operation' => $operation]);
         }
 
@@ -183,7 +217,7 @@ final class Workspace
             throw new InvalidDwg('input_not_found', ['operation' => $operation]);
         }
 
-        if (!\is_file($realPath) || !\is_readable($realPath)) {
+        if (! \is_file($realPath) || ! \is_readable($realPath)) {
             throw new InvalidDwg('input_not_readable', ['operation' => $operation]);
         }
 
@@ -236,8 +270,8 @@ final class Workspace
     /**
      * Copy a stream to the snapshot while enforcing its maximum size.
      *
-     * @param resource $input
-     * @param resource $output
+     * @param  resource  $input
+     * @param  resource  $output
      *
      * @throws DwgOperationFailed
      * @throws InvalidDwg
@@ -245,7 +279,7 @@ final class Workspace
     private function copyStream($input, $output, int $maxInputBytes, string $operation): void
     {
         $bytes = 0;
-        while (!\feof($input)) {
+        while (! \feof($input)) {
             $chunk = \fread($input, self::COPY_CHUNK_BYTES);
             if ($chunk === false) {
                 throw new DwgOperationFailed('input_snapshot_failed', ['operation' => $operation]);
@@ -267,6 +301,6 @@ final class Workspace
      */
     private static function isAbsolutePath(string $path): bool
     {
-        return \preg_match('/^(?:[A-Za-z]:[\\\\\/]|\\\\\\\\|\/)/', $path) === 1;
+        return \preg_match('/^(?:[A-Za-z]:[\\\\\/]|\/)/', $path) === 1;
     }
 }

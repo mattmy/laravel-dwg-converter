@@ -2,18 +2,19 @@
 
 declare(strict_types=1);
 
-namespace Mattmy\DwgConverter\Exceptions;
+namespace Mattmy\DwgConverter\Internal;
 
-use RuntimeException;
 use Throwable;
 
 /**
- * Provides stable machine-readable failure details for package errors.
+ * Supplies stable machine-readable details to public package exceptions.
+ *
+ * @internal
  */
-abstract class DwgException extends RuntimeException
+trait HasFailureContext
 {
     /**
-     * @param array<string, bool|float|int|string|null> $context
+     * @param  array<string, bool|float|int|string|null>  $context
      */
     public function __construct(
         private readonly string $reason,

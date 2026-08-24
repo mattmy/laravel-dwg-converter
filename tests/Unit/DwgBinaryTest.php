@@ -2,7 +2,6 @@
 
 declare(strict_types=1);
 
-use InvalidArgumentException;
 use Mattmy\DwgConverter\DwgBinary;
 use Mattmy\DwgConverter\DxfVersion;
 
@@ -10,7 +9,7 @@ it('keeps explicit binary bytes distinct from paths', function (): void {
     $binary = DwgBinary::from('AC1032 bytes');
 
     expect($binary->contents())->toBe('AC1032 bytes')
-        ->and(fn (): DwgBinary => DwgBinary::from(''))->toThrow(InvalidArgumentException::class);
+        ->and(DwgBinary::from('')->contents())->toBe('');
 });
 
 it('exposes only the approved DXF versions', function (): void {

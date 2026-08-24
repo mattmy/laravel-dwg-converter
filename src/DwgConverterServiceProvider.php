@@ -8,6 +8,7 @@ use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Support\ServiceProvider;
 use Mattmy\DwgConverter\Internal\Converter;
 use Mattmy\DwgConverter\Internal\ProcessRunner;
+use Mattmy\DwgConverter\Internal\SymfonyProcessRunner;
 use Override;
 
 /**
@@ -22,12 +23,22 @@ final class DwgConverterServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->mergeConfigFrom(__DIR__ . '/../config/dwg-converter.php', 'dwg-converter');
-        $this->app->singleton(ProcessRunner::class);
+        $this->app->singleton(ProcessRunner::class, SymfonyProcessRunner::class);
         $this->app->singleton(Converter::class, function (Application $app): Converter {
-            /** @var array{executables: array{dwgbmp: string, dwg2dxf: string, dwg2svg: string}, timeout: int|float, max_input_bytes: int, max_output_bytes: int, temporary_directory: string} $configuration */
-            $configuration = config('dwg-converter');
+            $configured = config('dwg-converter');
+            $configuration = [];
+            if (\is_array($configured)) {
+                foreach ($configured as $key => $value) {
+                    if (\is_string($key)) {
+                        $configuration[$key] = $value;
+                    }
+                }
+            }
 
-            return new Converter($app->make(ProcessRunner::class), $configuration);
+            return new Converter(
+                $app->make(ProcessRunner::class),
+                $configuration,
+            );
         });
         $this->app->singleton(DwgManager::class);
     }

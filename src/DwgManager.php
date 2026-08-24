@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Mattmy\DwgConverter;
 
+use Illuminate\Http\UploadedFile;
 use Mattmy\DwgConverter\Internal\Converter;
 use Mattmy\DwgConverter\Operations\DxfConversion;
 use Mattmy\DwgConverter\Operations\SvgConversion;
@@ -22,24 +23,24 @@ final class DwgManager
     /**
      * Start an immutable DWG to DXF conversion.
      */
-    public function toDxf(): DxfConversion
+    public function toDxf(UploadedFile|string|DwgBinary $source): DxfConversion
     {
-        return new DxfConversion($this->converter);
+        return new DxfConversion($this->converter, $source);
     }
 
     /**
      * Start a DWG to SVG conversion.
      */
-    public function toSvg(): SvgConversion
+    public function toSvg(UploadedFile|string|DwgBinary $source): SvgConversion
     {
-        return new SvgConversion($this->converter);
+        return new SvgConversion($this->converter, $source);
     }
 
     /**
      * Start an embedded DWG thumbnail extraction.
      */
-    public function thumbnail(): ThumbnailExtraction
+    public function thumbnail(UploadedFile|string|DwgBinary $source): ThumbnailExtraction
     {
-        return new ThumbnailExtraction($this->converter);
+        return new ThumbnailExtraction($this->converter, $source);
     }
 }

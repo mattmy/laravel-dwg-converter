@@ -10,6 +10,8 @@ use Mattmy\DwgConverter\DwgBinary;
 use Mattmy\DwgConverter\DwgOutput;
 use Mattmy\DwgConverter\DxfVersion;
 use Mattmy\DwgConverter\Exceptions\DwgOperationFailed;
+use Mattmy\DwgConverter\Exceptions\InvalidDwg;
+use Mattmy\DwgConverter\Exceptions\LibreDwgUnavailable;
 
 /**
  * Implements the three fixed LibreDWG operations behind the public builders.
@@ -17,7 +19,7 @@ use Mattmy\DwgConverter\Exceptions\DwgOperationFailed;
 final class Converter
 {
     /**
-     * @param array{executables: array{dwgbmp: string, dwg2dxf: string, dwg2svg: string}, timeout: int|float, max_input_bytes: int, max_output_bytes: int, temporary_directory: string} $configuration
+     * @param  array<string, mixed>  $configuration
      */
     public function __construct(
         private readonly ProcessRunner $processRunner,
@@ -28,26 +30,30 @@ final class Converter
      * Extract a DWG preview image using dwgbmp.
      *
      * @throws DwgOperationFailed
+     * @throws InvalidDwg
+     * @throws LibreDwgUnavailable
      */
     public function thumbnail(UploadedFile|string|DwgBinary $source): DwgOutput
     {
         $operation = 'thumbnail';
-        $workspace = $this->workspace($source, $operation);
+        $configuration = $this->configuration('dwgbmp', $operation);
+        $workspace = $this->workspace($source, $operation, $configuration);
+
         try {
-            $executable = $this->configuration['executables']['dwgbmp'];
+            $executable = $configuration['executable'];
             $this->processRunner->assertAvailable($executable, $operation);
             $this->processRunner->run(
                 [$executable, $workspace->inputPath()],
                 $workspace,
-                (float) $this->configuration['timeout'],
-                $this->configuration['max_output_bytes'],
+                $configuration['timeout'],
+                $configuration['max_output_bytes'],
                 $operation,
             );
 
             $thumbnail = $this->findThumbnail($workspace);
-            [$extension, $mimeType] = $this->thumbnailType($thumbnail);
+            [$extension, $mimeType] = $this->thumbnailType($thumbnail, $configuration['max_output_bytes']);
 
-            return new DwgOutput($workspace, $thumbnail, $extension, $mimeType, $this->configuration['max_output_bytes'], $operation);
+            return new DwgOutput($workspace, $thumbnail, $extension, $mimeType, $configuration['max_output_bytes'], $operation);
         } catch (\Throwable $exception) {
             $workspace->cleanup();
 
@@ -59,14 +65,18 @@ final class Converter
      * Convert a DWG to an ASCII DXF file.
      *
      * @throws DwgOperationFailed
+     * @throws InvalidDwg
+     * @throws LibreDwgUnavailable
      */
     public function dxf(UploadedFile|string|DwgBinary $source, ?DxfVersion $version): DwgOutput
     {
         $operation = 'dxf';
-        $workspace = $this->workspace($source, $operation);
+        $configuration = $this->configuration('dwg2dxf', $operation);
+        $workspace = $this->workspace($source, $operation, $configuration);
         $output = $workspace->outputPath('output.dxf');
+
         try {
-            $executable = $this->configuration['executables']['dwg2dxf'];
+            $executable = $configuration['executable'];
             $this->processRunner->assertAvailable($executable, $operation);
             $command = [$executable];
             if ($version instanceof DxfVersion) {
@@ -79,14 +89,14 @@ final class Converter
             $this->processRunner->run(
                 $command,
                 $workspace,
-                (float) $this->configuration['timeout'],
-                $this->configuration['max_output_bytes'],
+                $configuration['timeout'],
+                $configuration['max_output_bytes'],
                 $operation,
             );
-            $this->assertBoundedFile($output, $operation);
+            $this->assertBoundedFile($output, $operation, $configuration['max_output_bytes']);
             $this->assertDxf($output);
 
-            return new DwgOutput($workspace, $output, 'dxf', 'application/dxf', $this->configuration['max_output_bytes'], $operation);
+            return new DwgOutput($workspace, $output, 'dxf', 'application/dxf', $configuration['max_output_bytes'], $operation);
         } catch (\Throwable $exception) {
             $workspace->cleanup();
 
@@ -98,27 +108,31 @@ final class Converter
      * Convert the supported 2D portions of a DWG to SVG stdout.
      *
      * @throws DwgOperationFailed
+     * @throws InvalidDwg
+     * @throws LibreDwgUnavailable
      */
     public function svg(UploadedFile|string|DwgBinary $source): DwgOutput
     {
         $operation = 'svg';
-        $workspace = $this->workspace($source, $operation);
+        $configuration = $this->configuration('dwg2svg', $operation);
+        $workspace = $this->workspace($source, $operation, $configuration);
         $output = $workspace->outputPath('output.svg');
+
         try {
-            $executable = $this->configuration['executables']['dwg2svg'];
+            $executable = $configuration['executable'];
             $this->processRunner->assertAvailable($executable, $operation);
             $this->processRunner->run(
                 [$executable, $workspace->inputPath()],
                 $workspace,
-                (float) $this->configuration['timeout'],
-                $this->configuration['max_output_bytes'],
+                $configuration['timeout'],
+                $configuration['max_output_bytes'],
                 $operation,
                 $output,
             );
-            $this->assertBoundedFile($output, $operation);
+            $this->assertBoundedFile($output, $operation, $configuration['max_output_bytes']);
             $this->assertSvg($output);
 
-            return new DwgOutput($workspace, $output, 'svg', 'image/svg+xml', $this->configuration['max_output_bytes'], $operation);
+            return new DwgOutput($workspace, $output, 'svg', 'image/svg+xml', $configuration['max_output_bytes'], $operation);
         } catch (\Throwable $exception) {
             $workspace->cleanup();
 
@@ -129,30 +143,64 @@ final class Converter
     /**
      * Normalize settings and prepare a source snapshot for one operation.
      *
+     * @param  array{executable: string, timeout: float, max_input_bytes: int, max_output_bytes: int, temporary_directory: string}  $configuration
+     *
      * @throws DwgOperationFailed
+     * @throws InvalidDwg
      */
-    private function workspace(UploadedFile|string|DwgBinary $source, string $operation): Workspace
-    {
-        $this->assertConfiguration($operation);
-
+    private function workspace(
+        UploadedFile|string|DwgBinary $source,
+        string $operation,
+        array $configuration,
+    ): Workspace {
         return Workspace::fromSource(
             $source,
-            $this->configuration['temporary_directory'],
-            $this->configuration['max_input_bytes'],
+            $configuration['temporary_directory'],
+            $configuration['max_input_bytes'],
             $operation,
         );
     }
 
     /**
-     * Reject invalid published configuration before writing temporary data.
+     * Validate and normalize the settings needed by one operation.
      *
-     * @throws DwgOperationFailed
+     * @return array{executable: string, timeout: float, max_input_bytes: int, max_output_bytes: int, temporary_directory: string}
+     *
+     * @throws LibreDwgUnavailable
      */
-    private function assertConfiguration(string $operation): void
+    private function configuration(string $executableKey, string $operation): array
     {
-        if ($this->configuration['timeout'] <= 0 || $this->configuration['max_input_bytes'] < 1 || $this->configuration['max_output_bytes'] < 1) {
-            throw new DwgOperationFailed('invalid_configuration', ['operation' => $operation]);
+        $executables = $this->configuration['executables'] ?? null;
+        $executable = \is_array($executables) ? ($executables[$executableKey] ?? null) : null;
+        $timeout = $this->configuration['timeout'] ?? null;
+        $maxInputBytes = $this->configuration['max_input_bytes'] ?? null;
+        $maxOutputBytes = $this->configuration['max_output_bytes'] ?? null;
+        $temporaryDirectory = $this->configuration['temporary_directory'] ?? null;
+        $validTimeout = (\is_int($timeout) || \is_float($timeout))
+            && \is_finite((float) $timeout)
+            && $timeout > 0;
+        $validDirectory = \is_string($temporaryDirectory)
+            && \preg_match('/^(?:[A-Za-z]:[\\\\\/]|\/)/', $temporaryDirectory) === 1;
+
+        if (
+            ! \is_string($executable)
+            || ! $validTimeout
+            || ! \is_int($maxInputBytes)
+            || $maxInputBytes < 1
+            || ! \is_int($maxOutputBytes)
+            || $maxOutputBytes < 1
+            || ! $validDirectory
+        ) {
+            throw new LibreDwgUnavailable('invalid_configuration', ['operation' => $operation]);
         }
+
+        return [
+            'executable' => $executable,
+            'timeout' => (float) $timeout,
+            'max_input_bytes' => $maxInputBytes,
+            'max_output_bytes' => $maxOutputBytes,
+            'temporary_directory' => $temporaryDirectory,
+        ];
     }
 
     /**
@@ -189,20 +237,31 @@ final class Converter
      *
      * @throws DwgOperationFailed
      */
-    private function thumbnailType(string $path): array
+    private function thumbnailType(string $path, int $maxOutputBytes): array
     {
-        $this->assertBoundedFile($path, 'thumbnail');
+        $this->assertBoundedFile($path, 'thumbnail', $maxOutputBytes);
+        $size = \filesize($path);
         $header = \file_get_contents($path, false, null, 0, 8);
-        if (!\is_string($header)) {
+        if (! \is_int($size) || ! \is_string($header)) {
             throw new DwgOperationFailed('thumbnail_invalid', ['operation' => 'thumbnail']);
         }
 
         return match (true) {
-            \str_starts_with($header, "BM") => ['bmp', 'image/bmp'],
-            $header === "\x89PNG\r\n\x1a\n" => ['png', 'image/png'],
-            \str_starts_with($header, "\xd7\xcd\xc6\x9a") || \str_starts_with($header, "\x01\x00\x09\x00") => ['wmf', 'image/wmf'],
+            \str_starts_with($header, 'BM') && $size >= 54 => ['bmp', 'image/bmp'],
+            $header === "\x89PNG\r\n\x1a\n" && $size >= 28 && $this->hasPngEnd($path, $size) => ['png', 'image/png'],
+            \str_starts_with($header, "\xd7\xcd\xc6\x9a") && $size >= 40 => ['wmf', 'image/wmf'],
+            \str_starts_with($header, "\x01\x00\x09\x00") && $size >= 18 => ['wmf', 'image/wmf'],
             default => throw new DwgOperationFailed('thumbnail_invalid', ['operation' => 'thumbnail']),
         };
+    }
+
+    /**
+     * Confirm that a PNG ends with its mandatory IEND chunk.
+     */
+    private function hasPngEnd(string $path, int $size): bool
+    {
+        return \file_get_contents($path, false, null, $size - 12, 12)
+            === "\0\0\0\0IEND\xaeB`\x82";
     }
 
     /**
@@ -210,9 +269,9 @@ final class Converter
      *
      * @throws DwgOperationFailed
      */
-    private function assertBoundedFile(string $path, string $operation): void
+    private function assertBoundedFile(string $path, string $operation, int $maxOutputBytes): void
     {
-        if (!\is_file($path)) {
+        if (! \is_file($path)) {
             throw new DwgOperationFailed('output_missing', ['operation' => $operation]);
         }
 
@@ -221,7 +280,7 @@ final class Converter
             throw new DwgOperationFailed('output_missing', ['operation' => $operation]);
         }
 
-        if ($size > $this->configuration['max_output_bytes']) {
+        if ($size > $maxOutputBytes) {
             throw new DwgOperationFailed('output_too_large', ['operation' => $operation]);
         }
     }
@@ -233,8 +292,21 @@ final class Converter
      */
     private function assertDxf(string $path): void
     {
-        $contents = \file_get_contents($path, false, null, 0, 65536);
-        if (!\is_string($contents) || !\str_contains($contents, 'SECTION') || !\str_contains($contents, 'EOF')) {
+        $size = \filesize($path);
+        if (! \is_int($size)) {
+            throw new DwgOperationFailed('dxf_invalid', ['operation' => 'dxf']);
+        }
+
+        $head = \file_get_contents($path, false, null, 0, \min($size, 4096));
+        $tailOffset = \max(0, $size - 4096);
+        $tail = \file_get_contents($path, false, null, $tailOffset);
+        $isDxf = \is_string($head)
+            && \is_string($tail)
+            && ! \str_contains($head, "\0")
+            && \preg_match('/(?:^|\R)SECTION(?:\R|$)/', $head) === 1
+            && \preg_match('/(?:^|\R)\s*0\REOF\s*$/', $tail) === 1;
+
+        if (! $isDxf) {
             throw new DwgOperationFailed('dxf_invalid', ['operation' => 'dxf']);
         }
     }
@@ -246,14 +318,48 @@ final class Converter
      */
     private function assertSvg(string $path): void
     {
-        $head = \file_get_contents($path, false, null, 0, 65536);
-        if (!\is_string($head) || \stripos($head, '<!doctype') !== false || \stripos($head, '<!entity') !== false) {
+        if ($this->hasUnsafeXmlDeclaration($path)) {
             throw new DwgOperationFailed('svg_invalid', ['operation' => 'svg']);
         }
 
         $document = new DOMDocument();
-        if (!$document->load($path, \LIBXML_NONET | \LIBXML_NOERROR | \LIBXML_NOWARNING) || $document->documentElement?->localName !== 'svg') {
+        if (! $document->load($path, \LIBXML_NONET | \LIBXML_NOERROR | \LIBXML_NOWARNING) || $document->documentElement?->localName !== 'svg') {
             throw new DwgOperationFailed('svg_invalid', ['operation' => 'svg']);
+        }
+    }
+
+    /**
+     * Scan the complete SVG stream for declarations that enable entities.
+     *
+     * @throws DwgOperationFailed
+     */
+    private function hasUnsafeXmlDeclaration(string $path): bool
+    {
+        $stream = \fopen($path, 'rb');
+        if ($stream === false) {
+            throw new DwgOperationFailed('svg_invalid', ['operation' => 'svg']);
+        }
+
+        $tail = '';
+
+        try {
+            while (! \feof($stream)) {
+                $chunk = \fread($stream, 65536);
+                if ($chunk === false) {
+                    throw new DwgOperationFailed('svg_invalid', ['operation' => 'svg']);
+                }
+
+                $value = \strtolower($tail . $chunk);
+                if (\str_contains($value, '<!doctype') || \str_contains($value, '<!entity')) {
+                    return true;
+                }
+
+                $tail = \substr($value, -16);
+            }
+
+            return false;
+        } finally {
+            \fclose($stream);
         }
     }
 }
