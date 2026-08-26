@@ -7,7 +7,7 @@ namespace Mattmy\DwgConverter;
 use Illuminate\Http\UploadedFile;
 use Mattmy\DwgConverter\Internal\Converter;
 use Mattmy\DwgConverter\Operations\DxfConversion;
-use Mattmy\DwgConverter\Operations\PngConversion;
+use Mattmy\DwgConverter\Operations\ImageConversion;
 use Mattmy\DwgConverter\Operations\ThumbnailExtraction;
 
 /**
@@ -29,11 +29,11 @@ final class DwgManager
     }
 
     /**
-     * Start a DWG to PNG preview conversion.
+     * Start a DWG to raster image conversion.
      */
-    public function toPng(UploadedFile|string|DwgBinary $source): PngConversion
+    public function toImage(UploadedFile|string|DwgBinary $source): ImageConversion
     {
-        return new PngConversion($this->converter, $source);
+        return new ImageConversion($this->converter, $source);
     }
 
     /**

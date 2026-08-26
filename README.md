@@ -15,13 +15,14 @@ php artisan vendor:publish --tag=dwg-converter-config
 Configure `LIBREDWG_DWGBMP`, `LIBREDWG_DWG2DXF`, `DWG_CONVERTER_LIBREOFFICE`, and `DWG_CONVERTER_IMAGEMAGICK` with executable paths. The package neither downloads nor contains LibreDWG; use a maintained LibreDWG patch release.
 
 On Windows, point `DWG_CONVERTER_LIBREOFFICE` to LibreOffice's console launcher, normally `C:/Program Files/LibreOffice/program/soffice.com`; using `soffice.exe` can exit successfully without creating a headless conversion output.
-Also configure a short absolute `temporary_directory` path for PNG conversion. LibreOffice can crash when its isolated profile and intermediate files exceed Windows path limits.
+Also configure a short absolute `temporary_directory` path for image conversion. LibreOffice can crash when its isolated profile and intermediate files exceed Windows path limits.
 
 ```php
 use Mattmy\DwgConverter\DwgBinary;
 use Mattmy\DwgConverter\DxfVersion;
 use Mattmy\DwgConverter\Facades\Dwg;
-use Mattmy\DwgConverter\PngResolution;
+use Mattmy\DwgConverter\ImageFormat;
+use Mattmy\DwgConverter\ImageResolution;
 
 $thumbnail = Dwg::thumbnail($request->file('drawing'))->extract();
 
@@ -29,9 +30,10 @@ $dxf = Dwg::toDxf(DwgBinary::from($bytes))
     ->toVersion(DxfVersion::R2018)
     ->convert();
 
-$png = Dwg::toPng(storage_path('app/private/drawing.dwg'))
+$image = Dwg::toImage(storage_path('app/private/drawing.dwg'))
+    ->format(ImageFormat::WEBP)
     ->usingDxfVersion(DxfVersion::R2018)
-    ->atResolution(PngResolution::MEDIUM)
+    ->atResolution(ImageResolution::MEDIUM)
     ->convert();
 ```
 
@@ -39,9 +41,9 @@ Sources may be a valid `UploadedFile`, a local absolute path, or bytes explicitl
 
 Source binding performs no I/O. `convert()` and `extract()` snapshot the source, reject obvious non-DWG candidates, then rely on the selected LibreDWG command and output validation. Success means the configured LibreDWG build completed this operation without a critical decode failure; it is not a safety certification, full DWG conformance check, or visual-fidelity guarantee. Run untrusted DWG conversions in a resource-limited worker or container with current external-tool security patches.
 
-`thumbnail()` extracts an embedded preview rather than rendering the drawing. A DWG may have no preview, and the result may be BMP, PNG, or WMF. `toPng()` runs LibreDWG, LibreOffice headlessly, then ImageMagick trim to create a best-effort whole-model-space preview; it does not split drawings or promise AutoCAD visual fidelity.
+`thumbnail()` extracts an embedded preview rather than rendering the drawing. A DWG may have no preview, and the result may be BMP, PNG, or WMF. `toImage()` runs LibreDWG, then tells LibreOffice and ImageMagick to use the selected PNG (default), JPEG, or WebP format while ImageMagick removes white margins. It creates a best-effort whole-model-space preview; it does not split drawings or promise AutoCAD visual fidelity. JPEG output is flattened onto white because JPEG has no alpha channel, and is re-encoded after trimming. SVG is intentionally unsupported because the evaluated LibreDWG renderer produced excessive whitespace.
 
-`usingDxfVersion()` controls only the intermediate `dwg2dxf --as` target, not a PNG version. `atResolution()` chooses the pre-trim LibreOffice export canvas: `HIGH` (default, 4096×5792), `MEDIUM` (2048×2896), or `LOW` (1024×1448). The trimmed PNG dimensions depend on drawing content.
+`format()` accepts only `ImageFormat::PNG`, `ImageFormat::JPEG`, or `ImageFormat::WEBP`. `usingDxfVersion()` controls only the intermediate `dwg2dxf --as` target. `atResolution()` chooses the pre-trim LibreOffice export canvas: `HIGH` (default, 4096×5792), `MEDIUM` (2048×2896), or `LOW` (1024×1448). The trimmed image dimensions depend on drawing content.
 
 Each operation returns a one-time `DwgOutput`. `output()` loads the complete artifact into PHP memory; prefer Laravel Storage streaming for normal file delivery:
 

@@ -6,7 +6,8 @@ use Mattmy\DwgConverter\DwgBinary;
 use Mattmy\DwgConverter\DxfVersion;
 use Mattmy\DwgConverter\Exceptions\InvalidDwg;
 use Mattmy\DwgConverter\Facades\Dwg;
-use Mattmy\DwgConverter\PngResolution;
+use Mattmy\DwgConverter\ImageFormat;
+use Mattmy\DwgConverter\ImageResolution;
 
 $repository = \dirname(__DIR__, 4);
 $source = $repository . '/public/dwg/2G.dwg';
@@ -72,33 +73,45 @@ it('converts a real DWG to the selected DXF version', function () use ($source):
         ->and($contents)->toEndWith("0\r\nEOF\r\n");
 })->skip($missingIntegrationDependency, 'Repository Windows fixtures are unavailable.');
 
-it('converts a real DWG to a trimmed PNG preview', function () use ($pngSource): void {
+it('converts a real DWG to each trimmed image format', function (ImageFormat $format) use ($pngSource): void {
     $temporaryDirectory = \sys_get_temp_dir() . '/dwg-converter-integration-' . \bin2hex(\random_bytes(8));
     config()->set('dwg-converter.temporary_directory', $temporaryDirectory);
 
     try {
-        $contents = Dwg::toPng($pngSource)->convert()->output();
+        $image = Dwg::toImage($pngSource)->format($format)->convert();
+        $contents = $image->output();
+        $signature = match ($format) {
+            ImageFormat::PNG => "\x89PNG\r\n\x1a\n",
+            ImageFormat::JPEG => "\xff\xd8",
+            ImageFormat::WEBP => 'RIFF',
+        };
 
-        expect($contents)->toStartWith("\x89PNG\r\n\x1a\n");
+        expect($image->extension())->toBe($format->value)
+            ->and($image->mimeType())->toBe($format->mimeType())
+            ->and($contents)->toStartWith($signature);
     } finally {
         if (\is_dir($temporaryDirectory)) {
             expect(\scandir($temporaryDirectory))->toBe(['.', '..']);
             expect(\rmdir($temporaryDirectory))->toBeTrue();
         }
     }
-})->skip($missingIntegrationDependency, 'Repository Windows fixtures are unavailable.');
+})->with([
+    'PNG' => [ImageFormat::PNG],
+    'JPEG' => [ImageFormat::JPEG],
+    'WebP' => [ImageFormat::WEBP],
+])->skip($missingIntegrationDependency, 'Repository Windows fixtures are unavailable.');
 
-it('applies real PNG resolutions and an intermediate DXF version', function () use ($pngSource): void {
+it('applies real image resolutions and an intermediate DXF version', function () use ($pngSource): void {
     $temporaryDirectory = \sys_get_temp_dir() . '/dwg-converter-integration-' . \bin2hex(\random_bytes(8));
     config()->set('dwg-converter.temporary_directory', $temporaryDirectory);
 
     try {
-        $base = Dwg::toPng($pngSource);
+        $base = Dwg::toImage($pngSource);
         $high = pngDimensions($base->convert()->output());
-        $medium = pngDimensions($base->atResolution(PngResolution::MEDIUM)->convert()->output());
+        $medium = pngDimensions($base->atResolution(ImageResolution::MEDIUM)->convert()->output());
         $low = pngDimensions(
             $base->usingDxfVersion(DxfVersion::R2018)
-                ->atResolution(PngResolution::LOW)
+                ->atResolution(ImageResolution::LOW)
                 ->convert()
                 ->output(),
         );
@@ -120,7 +133,7 @@ it('rejects forged DWG bytes through every public operation', function (string $
 
     $operationResult = match ($operation) {
         'dxf' => static fn () => Dwg::toDxf($source)->convert(),
-        'png' => static fn () => Dwg::toPng($source)->convert(),
+        'image' => static fn () => Dwg::toImage($source)->convert(),
         'thumbnail' => static fn () => Dwg::thumbnail($source)->extract(),
         default => throw new RuntimeException('Unknown acceptance operation.'),
     };
@@ -128,6 +141,6 @@ it('rejects forged DWG bytes through every public operation', function (string $
     expect($operationResult)->toThrow(InvalidDwg::class, 'libredwg_rejected_input');
 })->with([
     'DXF' => ['dxf'],
-    'PNG' => ['png'],
+    'image' => ['image'],
     'thumbnail' => ['thumbnail'],
 ])->skip($missingLibreDwg, 'Repository LibreDWG binaries are unavailable.');

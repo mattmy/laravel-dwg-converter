@@ -49,25 +49,6 @@ final class FakeProcessRunner implements ProcessRunner
     }
 
     /**
-     * Create a fake that writes SVG bytes to the supplied stdout path.
-     */
-    public static function writesStdout(string $contents): self
-    {
-        return new self(static function (
-            array $_command,
-            Workspace $_workspace,
-            float $_timeout,
-            int $_maxOutputBytes,
-            string $_operation,
-            ?string $stdoutPath,
-        ) use ($contents): void {
-            if ($stdoutPath === null || \file_put_contents($stdoutPath, $contents) === false) {
-                throw new \RuntimeException('Unable to write a fake stdout output.');
-            }
-        });
-    }
-
-    /**
      * Either accept the executable or emit the configured environment failure.
      *
      * @throws LibreDwgUnavailable

@@ -4,7 +4,8 @@ declare(strict_types=1);
 
 use Mattmy\DwgConverter\DwgBinary;
 use Mattmy\DwgConverter\DxfVersion;
-use Mattmy\DwgConverter\PngResolution;
+use Mattmy\DwgConverter\ImageFormat;
+use Mattmy\DwgConverter\ImageResolution;
 
 it('keeps explicit binary bytes distinct from paths', function (): void {
     $binary = DwgBinary::from('AC1032 bytes');
@@ -18,10 +19,14 @@ it('exposes only the approved DXF versions', function (): void {
         ->and(DxfVersion::R2018->value)->toBe('r2018');
 });
 
-it('exposes only the approved PNG preview resolutions', function (): void {
-    expect(PngResolution::cases())->toBe([
-        PngResolution::HIGH,
-        PngResolution::MEDIUM,
-        PngResolution::LOW,
+it('exposes only the approved image formats and resolutions', function (): void {
+    expect(ImageFormat::cases())->toBe([
+        ImageFormat::PNG,
+        ImageFormat::JPEG,
+        ImageFormat::WEBP,
+    ])->and(ImageResolution::cases())->toBe([
+        ImageResolution::HIGH,
+        ImageResolution::MEDIUM,
+        ImageResolution::LOW,
     ]);
 });

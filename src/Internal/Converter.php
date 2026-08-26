@@ -11,7 +11,8 @@ use Mattmy\DwgConverter\DxfVersion;
 use Mattmy\DwgConverter\Exceptions\DwgOperationFailed;
 use Mattmy\DwgConverter\Exceptions\InvalidDwg;
 use Mattmy\DwgConverter\Exceptions\LibreDwgUnavailable;
-use Mattmy\DwgConverter\PngResolution;
+use Mattmy\DwgConverter\ImageFormat;
+use Mattmy\DwgConverter\ImageResolution;
 
 /**
  * Implements the three fixed LibreDWG operations behind the public builders.
@@ -22,7 +23,7 @@ final class Converter
 
     private const int PNG_IHDR_BYTES = 24;
 
-    private const int MAX_PNG_DIMENSION = 32_768;
+    private const int MAX_IMAGE_DIMENSION = 32_768;
 
     /**
      * @param  array<string, mixed>  $configuration
@@ -57,7 +58,7 @@ final class Converter
             );
 
             $thumbnail = $this->findThumbnail($workspace);
-            [$extension, $mimeType] = $this->thumbnailType($thumbnail, $configuration['max_output_bytes']);
+            [$extension, $mimeType] = $this->thumbnailType($thumbnail, $workspace, $configuration['max_output_bytes']);
 
             return new DwgOutput($workspace, $thumbnail, $extension, $mimeType, $configuration['max_output_bytes'], $operation);
         } catch (\Throwable $exception) {
@@ -99,7 +100,7 @@ final class Converter
                 $configuration['max_output_bytes'],
                 $operation,
             );
-            $this->assertBoundedFile($output, $operation, $configuration['max_output_bytes']);
+            $this->assertBoundedFile($output, $workspace, $operation, $configuration['max_output_bytes']);
             $this->assertDxf($output);
 
             return new DwgOutput($workspace, $output, 'dxf', 'application/dxf', $configuration['max_output_bytes'], $operation);
@@ -111,25 +112,26 @@ final class Converter
     }
 
     /**
-     * Convert a DWG to a trimmed whole-model-space PNG preview.
+     * Convert a DWG to a trimmed whole-model-space raster image.
      *
      * @throws DwgOperationFailed
      * @throws InvalidDwg
      * @throws LibreDwgUnavailable
      */
-    public function png(
+    public function image(
         UploadedFile|string|DwgBinary $source,
+        ImageFormat $format,
         ?DxfVersion $version,
-        PngResolution $resolution,
+        ImageResolution $resolution,
     ): DwgOutput {
-        $operation = 'png';
+        $operation = 'image';
         $dxfConfiguration = $this->configuration('dwg2dxf', $operation);
         $libreOfficeConfiguration = $this->configuration('libreoffice', $operation);
         $imageMagickConfiguration = $this->configuration('imagemagick', $operation);
         $workspace = $this->workspace($source, $operation, $dxfConfiguration);
         $dxf = $workspace->outputPath('drawing.dxf');
-        $rawPng = $workspace->outputPath('drawing.png');
-        $output = $workspace->outputPath('output.png');
+        $intermediateImage = $workspace->outputPath('drawing.' . $format->value);
+        $output = $workspace->outputPath('output.' . $format->value);
         $profile = $workspace->outputPath('libreoffice-profile');
 
         try {
@@ -155,7 +157,7 @@ final class Converter
                 null,
                 'dwg2dxf',
             );
-            $this->assertBoundedFile($dxf, $operation, $dxfConfiguration['max_output_bytes']);
+            $this->assertBoundedFile($dxf, $workspace, $operation, $dxfConfiguration['max_output_bytes']);
             $this->assertDxf($dxf, $operation);
 
             $this->processRunner->assertAvailable($libreOfficeConfiguration['executable'], $operation, 'libreoffice', 'libreoffice');
@@ -169,7 +171,7 @@ final class Converter
                     '--nofirststartwizard',
                     '--norestore',
                     '--convert-to',
-                    $this->pngFilter($resolution),
+                    $this->imageFilter($format, $resolution),
                     '--outdir',
                     $workspace->directory(),
                     $dxf,
@@ -181,19 +183,23 @@ final class Converter
                 null,
                 'libreoffice',
             );
-            $this->assertPng($rawPng, $operation, $libreOfficeConfiguration['max_output_bytes']);
+            $this->assertImage($intermediateImage, $format, $workspace, $operation, $libreOfficeConfiguration['max_output_bytes']);
 
             $this->processRunner->assertAvailable($imageMagickConfiguration['executable'], $operation, 'imagemagick', 'imagemagick');
+            $command = [
+                $imageMagickConfiguration['executable'],
+                $intermediateImage,
+                '-fuzz',
+                '2%',
+                '-trim',
+                '+repage',
+            ];
+            if ($format === ImageFormat::JPEG) {
+                \array_push($command, '-background', 'white', '-alpha', 'remove', '-alpha', 'off');
+            }
+            $command[] = $output;
             $this->processRunner->run(
-                [
-                    $imageMagickConfiguration['executable'],
-                    $rawPng,
-                    '-fuzz',
-                    '2%',
-                    '-trim',
-                    '+repage',
-                    $output,
-                ],
+                $command,
                 $workspace,
                 $imageMagickConfiguration['timeout'],
                 $imageMagickConfiguration['max_output_bytes'],
@@ -201,13 +207,13 @@ final class Converter
                 null,
                 'imagemagick',
             );
-            $this->assertPng($output, $operation, $imageMagickConfiguration['max_output_bytes']);
+            $this->assertImage($output, $format, $workspace, $operation, $imageMagickConfiguration['max_output_bytes']);
 
             return new DwgOutput(
                 $workspace,
                 $output,
-                'png',
-                'image/png',
+                $format->value,
+                $format->mimeType(),
                 $imageMagickConfiguration['max_output_bytes'],
                 $operation,
             );
@@ -315,9 +321,9 @@ final class Converter
      *
      * @throws DwgOperationFailed
      */
-    private function thumbnailType(string $path, int $maxOutputBytes): array
+    private function thumbnailType(string $path, Workspace $workspace, int $maxOutputBytes): array
     {
-        $this->assertBoundedFile($path, 'thumbnail', $maxOutputBytes);
+        $this->assertBoundedFile($path, $workspace, 'thumbnail', $maxOutputBytes);
         $size = \filesize($path);
         $header = \file_get_contents($path, false, null, 0, 8);
         if (! \is_int($size) || ! \is_string($header)) {
@@ -347,9 +353,13 @@ final class Converter
      *
      * @throws DwgOperationFailed
      */
-    private function assertBoundedFile(string $path, string $operation, int $maxOutputBytes): void
-    {
-        if (! \is_file($path)) {
+    private function assertBoundedFile(
+        string $path,
+        Workspace $workspace,
+        string $operation,
+        int $maxOutputBytes,
+    ): void {
+        if (\is_link($path) || ! \is_file($path) || ! $workspace->owns($path)) {
             throw new DwgOperationFailed('output_missing', ['operation' => $operation]);
         }
 
@@ -390,44 +400,129 @@ final class Converter
     }
 
     /**
-     * Validate a bounded PNG signature, IHDR dimensions, and IEND trailer.
+     * Validate a bounded image signature, dimensions, and required container markers.
      *
      * @throws DwgOperationFailed
      */
-    private function assertPng(string $path, string $operation, int $maxOutputBytes): void
-    {
-        $this->assertBoundedFile($path, $operation, $maxOutputBytes);
+    private function assertImage(
+        string $path,
+        ImageFormat $format,
+        Workspace $workspace,
+        string $operation,
+        int $maxOutputBytes,
+    ): void {
+        $this->assertBoundedFile($path, $workspace, $operation, $maxOutputBytes);
         $size = \filesize($path);
-        $header = \file_get_contents($path, false, null, 0, self::PNG_IHDR_BYTES);
+        $structureIsValid = \is_int($size) && match ($format) {
+            ImageFormat::PNG => $this->isPng($path, $size),
+            ImageFormat::JPEG => $this->isJpeg($path, $size),
+            ImageFormat::WEBP => $this->isWebp($path, $size),
+        };
+        $image = $this->imageInfo($path);
+        $expectedType = match ($format) {
+            ImageFormat::PNG => IMAGETYPE_PNG,
+            ImageFormat::JPEG => IMAGETYPE_JPEG,
+            ImageFormat::WEBP => IMAGETYPE_WEBP,
+        };
+        $width = $image['width'] ?? 0;
+        $height = $image['height'] ?? 0;
         if (
-            ! \is_int($size)
-            || ! \is_string($header)
-            || $size < self::PNG_IHDR_BYTES + 12
-            || \substr($header, 0, self::PNG_SIGNATURE_BYTES) !== "\x89PNG\r\n\x1a\n"
-            || \substr($header, 8, 8) !== "\0\0\0\rIHDR"
-            || ! $this->hasPngEnd($path, $size)
+            ! $structureIsValid
+            || ($image['type'] ?? 0) !== $expectedType
+            || $width < 1
+            || $height < 1
+            || $width > self::MAX_IMAGE_DIMENSION
+            || $height > self::MAX_IMAGE_DIMENSION
         ) {
-            throw new DwgOperationFailed('png_invalid', ['operation' => $operation]);
-        }
-
-        $dimensions = \unpack('Nwidth/Nheight', \substr($header, 16, 8));
-        $width = $dimensions['width'] ?? 0;
-        $height = $dimensions['height'] ?? 0;
-        if ($width < 1 || $height < 1 || $width > self::MAX_PNG_DIMENSION || $height > self::MAX_PNG_DIMENSION) {
-            throw new DwgOperationFailed('png_invalid', ['operation' => $operation]);
+            throw new DwgOperationFailed('image_invalid', ['operation' => $operation]);
         }
     }
 
     /**
-     * Return the fixed LibreOffice PNG filter for one supported resolution.
+     * Confirm a PNG signature, IHDR chunk, and IEND trailer.
      */
-    private function pngFilter(PngResolution $resolution): string
+    private function isPng(string $path, int $size): bool
     {
-        return match ($resolution) {
-            PngResolution::HIGH => 'png:draw_png_Export:{"PixelHeight":{"type":"long","value":"5792"},"PixelWidth":{"type":"long","value":"4096"}}',
-            PngResolution::MEDIUM => 'png:draw_png_Export:{"PixelHeight":{"type":"long","value":"2896"},"PixelWidth":{"type":"long","value":"2048"}}',
-            PngResolution::LOW => 'png:draw_png_Export:{"PixelHeight":{"type":"long","value":"1448"},"PixelWidth":{"type":"long","value":"1024"}}',
+        $header = \file_get_contents($path, false, null, 0, self::PNG_IHDR_BYTES);
+
+        return $size >= self::PNG_IHDR_BYTES + 12
+            && \is_string($header)
+            && \substr($header, 0, self::PNG_SIGNATURE_BYTES) === "\x89PNG\r\n\x1a\n"
+            && \substr($header, 8, 8) === "\0\0\0\rIHDR"
+            && $this->hasPngEnd($path, $size);
+    }
+
+    /**
+     * Confirm a JPEG start-of-image and end-of-image marker.
+     */
+    private function isJpeg(string $path, int $size): bool
+    {
+        $header = \file_get_contents($path, false, null, 0, 2);
+        $trailer = $size >= 2 ? \file_get_contents($path, false, null, $size - 2, 2) : false;
+
+        return $size >= 4 && $header === "\xff\xd8" && $trailer === "\xff\xd9";
+    }
+
+    /**
+     * Confirm a complete RIFF WebP container header.
+     */
+    private function isWebp(string $path, int $size): bool
+    {
+        $header = \file_get_contents($path, false, null, 0, 12);
+        $riff = \is_string($header) ? \unpack('Vsize', \substr($header, 4, 4)) : false;
+
+        return $size >= 20
+            && \is_string($header)
+            && \substr($header, 0, 4) === 'RIFF'
+            && \substr($header, 8, 4) === 'WEBP'
+            && $this->unpackedInteger($riff['size'] ?? null, -1) + 8 === $size;
+    }
+
+    /**
+     * Read an image's native dimensions and detected type without surfacing parser warnings.
+     *
+     * @return array{width: int, height: int, type: int}|null
+     */
+    private function imageInfo(string $path): ?array
+    {
+        \set_error_handler(static fn (): bool => true);
+
+        try {
+            $image = \getimagesize($path);
+        } finally {
+            \restore_error_handler();
+        }
+
+        return \is_array($image)
+            ? ['width' => $image[0], 'height' => $image[1], 'type' => $image[2]]
+            : null;
+    }
+
+    /**
+     * Narrow one value returned by unpack to an integer.
+     */
+    private function unpackedInteger(mixed $value, int $default = 0): int
+    {
+        return \is_int($value) ? $value : $default;
+    }
+
+    /**
+     * Return the LibreOffice filter for one image format and supported resolution.
+     */
+    private function imageFilter(ImageFormat $format, ImageResolution $resolution): string
+    {
+        $filter = match ($format) {
+            ImageFormat::PNG => 'png:draw_png_Export',
+            ImageFormat::JPEG => 'jpg:draw_jpg_Export',
+            ImageFormat::WEBP => 'webp:draw_webp_Export',
         };
+        $dimensions = match ($resolution) {
+            ImageResolution::HIGH => '{"PixelHeight":{"type":"long","value":"5792"},"PixelWidth":{"type":"long","value":"4096"}}',
+            ImageResolution::MEDIUM => '{"PixelHeight":{"type":"long","value":"2896"},"PixelWidth":{"type":"long","value":"2048"}}',
+            ImageResolution::LOW => '{"PixelHeight":{"type":"long","value":"1448"},"PixelWidth":{"type":"long","value":"1024"}}',
+        };
+
+        return $filter . ':' . $dimensions;
     }
 
     /**
