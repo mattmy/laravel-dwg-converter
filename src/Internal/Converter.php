@@ -11,6 +11,7 @@ use Mattmy\DwgConverter\DxfVersion;
 use Mattmy\DwgConverter\Exceptions\DwgOperationFailed;
 use Mattmy\DwgConverter\Exceptions\InvalidDwg;
 use Mattmy\DwgConverter\Exceptions\LibreDwgUnavailable;
+use Mattmy\DwgConverter\PngResolution;
 
 /**
  * Implements the three fixed LibreDWG operations behind the public builders.
@@ -116,8 +117,11 @@ final class Converter
      * @throws InvalidDwg
      * @throws LibreDwgUnavailable
      */
-    public function png(UploadedFile|string|DwgBinary $source): DwgOutput
-    {
+    public function png(
+        UploadedFile|string|DwgBinary $source,
+        ?DxfVersion $version,
+        PngResolution $resolution,
+    ): DwgOutput {
         $operation = 'png';
         $dxfConfiguration = $this->configuration('dwg2dxf', $operation);
         $libreOfficeConfiguration = $this->configuration('libreoffice', $operation);
@@ -134,8 +138,16 @@ final class Converter
             }
 
             $this->processRunner->assertAvailable($dxfConfiguration['executable'], $operation, 'dwg2dxf', 'dwg2dxf');
+            $dxfCommand = [$dxfConfiguration['executable']];
+            if ($version instanceof DxfVersion) {
+                $dxfCommand[] = '--as';
+                $dxfCommand[] = $version->value;
+            }
+            $dxfCommand[] = '-o';
+            $dxfCommand[] = $dxf;
+            $dxfCommand[] = $workspace->inputPath();
             $this->processRunner->run(
-                [$dxfConfiguration['executable'], '-o', $dxf, $workspace->inputPath()],
+                $dxfCommand,
                 $workspace,
                 $dxfConfiguration['timeout'],
                 $dxfConfiguration['max_output_bytes'],
@@ -157,7 +169,7 @@ final class Converter
                     '--nofirststartwizard',
                     '--norestore',
                     '--convert-to',
-                    'png:draw_png_Export:{"PixelHeight":{"type":"long","value":"5792"},"PixelWidth":{"type":"long","value":"4096"}}',
+                    $this->pngFilter($resolution),
                     '--outdir',
                     $workspace->directory(),
                     $dxf,
@@ -404,6 +416,18 @@ final class Converter
         if ($width < 1 || $height < 1 || $width > self::MAX_PNG_DIMENSION || $height > self::MAX_PNG_DIMENSION) {
             throw new DwgOperationFailed('png_invalid', ['operation' => $operation]);
         }
+    }
+
+    /**
+     * Return the fixed LibreOffice PNG filter for one supported resolution.
+     */
+    private function pngFilter(PngResolution $resolution): string
+    {
+        return match ($resolution) {
+            PngResolution::HIGH => 'png:draw_png_Export:{"PixelHeight":{"type":"long","value":"5792"},"PixelWidth":{"type":"long","value":"4096"}}',
+            PngResolution::MEDIUM => 'png:draw_png_Export:{"PixelHeight":{"type":"long","value":"2896"},"PixelWidth":{"type":"long","value":"2048"}}',
+            PngResolution::LOW => 'png:draw_png_Export:{"PixelHeight":{"type":"long","value":"1448"},"PixelWidth":{"type":"long","value":"1024"}}',
+        };
     }
 
     /**

@@ -6,6 +6,7 @@ use Mattmy\DwgConverter\DwgBinary;
 use Mattmy\DwgConverter\DxfVersion;
 use Mattmy\DwgConverter\Exceptions\InvalidDwg;
 use Mattmy\DwgConverter\Facades\Dwg;
+use Mattmy\DwgConverter\PngResolution;
 
 $repository = \dirname(__DIR__, 4);
 $source = $repository . '/public/dwg/2G.dwg';
@@ -31,6 +32,26 @@ $missingLibreDwg = PHP_OS_FAMILY !== 'Windows'
 beforeEach(function () use ($executables): void {
     config()->set('dwg-converter.executables', $executables);
 });
+
+/**
+ * Read dimensions from a structurally validated PNG artifact.
+ *
+ * @return array{width: int, height: int}
+ */
+function pngDimensions(string $contents): array
+{
+    $dimensions = \unpack('Nwidth/Nheight', \substr($contents, 16, 8));
+    $width = $dimensions['width'] ?? null;
+    $height = $dimensions['height'] ?? null;
+    if (! \is_int($width) || ! \is_int($height)) {
+        throw new RuntimeException('Unable to read PNG dimensions.');
+    }
+
+    return [
+        'width' => $width,
+        'height' => $height,
+    ];
+}
 
 it('extracts a real embedded thumbnail', function () use ($source): void {
     $thumbnail = Dwg::thumbnail($source)->extract();
@@ -59,6 +80,33 @@ it('converts a real DWG to a trimmed PNG preview', function () use ($pngSource):
         $contents = Dwg::toPng($pngSource)->convert()->output();
 
         expect($contents)->toStartWith("\x89PNG\r\n\x1a\n");
+    } finally {
+        if (\is_dir($temporaryDirectory)) {
+            expect(\scandir($temporaryDirectory))->toBe(['.', '..']);
+            expect(\rmdir($temporaryDirectory))->toBeTrue();
+        }
+    }
+})->skip($missingIntegrationDependency, 'Repository Windows fixtures are unavailable.');
+
+it('applies real PNG resolutions and an intermediate DXF version', function () use ($pngSource): void {
+    $temporaryDirectory = \sys_get_temp_dir() . '/dwg-converter-integration-' . \bin2hex(\random_bytes(8));
+    config()->set('dwg-converter.temporary_directory', $temporaryDirectory);
+
+    try {
+        $base = Dwg::toPng($pngSource);
+        $high = pngDimensions($base->convert()->output());
+        $medium = pngDimensions($base->atResolution(PngResolution::MEDIUM)->convert()->output());
+        $low = pngDimensions(
+            $base->usingDxfVersion(DxfVersion::R2018)
+                ->atResolution(PngResolution::LOW)
+                ->convert()
+                ->output(),
+        );
+
+        expect($high['width'])->toBeGreaterThan($medium['width'])
+            ->and($medium['width'])->toBeGreaterThan($low['width'])
+            ->and($high['height'])->toBeGreaterThan($medium['height'])
+            ->and($medium['height'])->toBeGreaterThan($low['height']);
     } finally {
         if (\is_dir($temporaryDirectory)) {
             expect(\scandir($temporaryDirectory))->toBe(['.', '..']);

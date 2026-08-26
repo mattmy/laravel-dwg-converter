@@ -21,6 +21,7 @@ Also configure a short absolute `temporary_directory` path for PNG conversion. L
 use Mattmy\DwgConverter\DwgBinary;
 use Mattmy\DwgConverter\DxfVersion;
 use Mattmy\DwgConverter\Facades\Dwg;
+use Mattmy\DwgConverter\PngResolution;
 
 $thumbnail = Dwg::thumbnail($request->file('drawing'))->extract();
 
@@ -28,7 +29,10 @@ $dxf = Dwg::toDxf(DwgBinary::from($bytes))
     ->toVersion(DxfVersion::R2018)
     ->convert();
 
-$png = Dwg::toPng(storage_path('app/private/drawing.dwg'))->convert();
+$png = Dwg::toPng(storage_path('app/private/drawing.dwg'))
+    ->usingDxfVersion(DxfVersion::R2018)
+    ->atResolution(PngResolution::MEDIUM)
+    ->convert();
 ```
 
 Sources may be a valid `UploadedFile`, a local absolute path, or bytes explicitly wrapped with `DwgBinary::from()`. A plain string is always treated as a path.
@@ -36,6 +40,8 @@ Sources may be a valid `UploadedFile`, a local absolute path, or bytes explicitl
 Source binding performs no I/O. `convert()` and `extract()` snapshot the source, reject obvious non-DWG candidates, then rely on the selected LibreDWG command and output validation. Success means the configured LibreDWG build completed this operation without a critical decode failure; it is not a safety certification, full DWG conformance check, or visual-fidelity guarantee. Run untrusted DWG conversions in a resource-limited worker or container with current external-tool security patches.
 
 `thumbnail()` extracts an embedded preview rather than rendering the drawing. A DWG may have no preview, and the result may be BMP, PNG, or WMF. `toPng()` runs LibreDWG, LibreOffice headlessly, then ImageMagick trim to create a best-effort whole-model-space preview; it does not split drawings or promise AutoCAD visual fidelity.
+
+`usingDxfVersion()` controls only the intermediate `dwg2dxf --as` target, not a PNG version. `atResolution()` chooses the pre-trim LibreOffice export canvas: `HIGH` (default, 4096×5792), `MEDIUM` (2048×2896), or `LOW` (1024×1448). The trimmed PNG dimensions depend on drawing content.
 
 Each operation returns a one-time `DwgOutput`. `output()` loads the complete artifact into PHP memory; prefer Laravel Storage streaming for normal file delivery:
 

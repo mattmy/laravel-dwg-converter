@@ -6,3 +6,4 @@
 - Bind each source at `toDxf()`, `toPng()`, or `thumbnail()` and keep terminal verbs argument-free.
 - Add bounded temporary workspaces, one-time outputs, Laravel Storage streaming, and stable package failures.
 - Replace the unshipped SVG operation with the fixed DXF, LibreOffice, and ImageMagick PNG pipeline.
+- Add PNG intermediate DXF-version selection and HIGH, MEDIUM, LOW preview-resolution presets.
