@@ -157,7 +157,7 @@ final class Converter
                     '--nofirststartwizard',
                     '--norestore',
                     '--convert-to',
-                    'png:draw_png_Export:PixelWidth=4096,PixelHeight=5792',
+                    'png:draw_png_Export:{"PixelHeight":{"type":"long","value":"5792"},"PixelWidth":{"type":"long","value":"4096"}}',
                     '--outdir',
                     $workspace->directory(),
                     $dxf,

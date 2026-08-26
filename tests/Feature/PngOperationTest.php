@@ -50,7 +50,7 @@ it('converts a DWG through the fixed PNG preview pipeline', function (): void {
         ->and($runner->commands[1])->toContain(
             '--headless',
             '--nofirststartwizard',
-            'png:draw_png_Export:PixelWidth=4096,PixelHeight=5792',
+            'png:draw_png_Export:{"PixelHeight":{"type":"long","value":"5792"},"PixelWidth":{"type":"long","value":"4096"}}',
         )
         ->and($runner->commands[2])->toContain('-fuzz', '2%', '-trim', '+repage');
 });
