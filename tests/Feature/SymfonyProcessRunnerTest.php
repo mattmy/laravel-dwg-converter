@@ -10,7 +10,7 @@ use Mattmy\DwgConverter\Internal\SymfonyProcessRunner;
 use Mattmy\DwgConverter\Internal\Workspace;
 
 it('rejects an executable that is not the selected LibreDWG tool', function (): void {
-    expect(fn () => (new SymfonyProcessRunner())->assertAvailable(PHP_BINARY, 'svg'))
+    expect(fn () => (new SymfonyProcessRunner())->assertAvailable(PHP_BINARY, 'dxf'))
         ->toThrow(LibreDwgUnavailable::class, 'unsupported_tool_capability');
 });
 
@@ -42,7 +42,7 @@ it('maps process timeout without leaving a workspace', function (): void {
         DwgBinary::from('AC1032 drawing'),
         config()->string('dwg-converter.temporary_directory'),
         1024,
-        'svg',
+        'png',
     );
 
     try {
@@ -53,7 +53,7 @@ it('maps process timeout without leaving a workspace', function (): void {
             $workspace,
             0.05,
             1024,
-            'svg',
+            'png',
         ))->toThrow(DwgOperationFailed::class, 'process_timed_out');
     } finally {
         $workspace->cleanup();
@@ -65,7 +65,7 @@ it('stops stdout that exceeds the configured limit', function (): void {
         DwgBinary::from('AC1032 drawing'),
         config()->string('dwg-converter.temporary_directory'),
         1024,
-        'svg',
+        'png',
     );
 
     try {
@@ -76,8 +76,8 @@ it('stops stdout that exceeds the configured limit', function (): void {
             $workspace,
             5.0,
             16,
-            'svg',
-            $workspace->outputPath('output.svg'),
+            'png',
+            $workspace->outputPath('output.png'),
         ))->toThrow(DwgOperationFailed::class, 'output_too_large');
     } finally {
         $workspace->cleanup();

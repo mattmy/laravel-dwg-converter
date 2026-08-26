@@ -24,10 +24,14 @@ final class SymfonyProcessRunner implements ProcessRunner
      * @throws LibreDwgUnavailable
      */
     #[Override]
-    public function assertAvailable(string $executable, string $operation): void
-    {
+    public function assertAvailable(
+        string $executable,
+        string $operation,
+        ?string $expectedTool = null,
+        string $stage = 'convert',
+    ): void {
         if ($executable === '') {
-            throw new LibreDwgUnavailable('executable_not_found', ['operation' => $operation]);
+            throw new LibreDwgUnavailable('executable_not_found', $this->context($operation, $stage));
         }
 
         try {
@@ -35,19 +39,18 @@ final class SymfonyProcessRunner implements ProcessRunner
             $process->setTimeout(10.0);
             $process->run();
         } catch (\Throwable $exception) {
-            throw new LibreDwgUnavailable('executable_not_found', ['operation' => $operation], $exception);
+            throw new LibreDwgUnavailable('executable_not_found', $this->context($operation, $stage), $exception);
         }
 
         $reportedVersion = \trim($process->getOutput() . $process->getErrorOutput());
-        $expectedTool = match ($operation) {
+        $expectedTool ??= match ($operation) {
             'thumbnail' => 'dwgbmp',
             'dxf' => 'dwg2dxf',
-            'svg' => 'dwg2svg',
             default => '',
         };
         if (! $process->isSuccessful() || ! \str_contains(\strtolower($reportedVersion), $expectedTool)) {
             throw new LibreDwgUnavailable('unsupported_tool_capability', [
-                'operation' => $operation,
+                ...$this->context($operation, $stage),
                 'reported_version' => $this->summary($reportedVersion),
             ]);
         }
@@ -69,6 +72,7 @@ final class SymfonyProcessRunner implements ProcessRunner
         int $maxOutputBytes,
         string $operation,
         ?string $stdoutPath = null,
+        string $stage = 'convert',
     ): void {
         $stderr = '';
         $tooLarge = false;
@@ -76,7 +80,7 @@ final class SymfonyProcessRunner implements ProcessRunner
         if ($stdoutPath !== null) {
             $stream = \fopen($stdoutPath, 'xb');
             if ($stream === false) {
-                throw new DwgOperationFailed('output_missing', ['operation' => $operation]);
+                throw new DwgOperationFailed('output_missing', $this->context($operation, $stage));
             }
         }
 
@@ -108,9 +112,9 @@ final class SymfonyProcessRunner implements ProcessRunner
                 }
             });
         } catch (ProcessTimedOutException $exception) {
-            throw new DwgOperationFailed('process_timed_out', ['operation' => $operation], $exception);
+            throw new DwgOperationFailed('process_timed_out', $this->context($operation, $stage), $exception);
         } catch (\Throwable $exception) {
-            throw new DwgOperationFailed('process_failed', ['operation' => $operation], $exception);
+            throw new DwgOperationFailed('process_failed', $this->context($operation, $stage), $exception);
         } finally {
             if (\is_resource($stream)) {
                 \fclose($stream);
@@ -118,12 +122,12 @@ final class SymfonyProcessRunner implements ProcessRunner
         }
 
         if ($tooLarge) {
-            throw new DwgOperationFailed('output_too_large', ['operation' => $operation]);
+            throw new DwgOperationFailed('output_too_large', $this->context($operation, $stage));
         }
 
         if (! $process->isSuccessful()) {
             $context = [
-                'operation' => $operation,
+                ...$this->context($operation, $stage),
                 'exit_code' => $process->getExitCode(),
                 'stderr' => $this->summary($stderr),
             ];
@@ -159,5 +163,17 @@ final class SymfonyProcessRunner implements ProcessRunner
         $value = \preg_replace('/(?:[A-Za-z]:)?[\\\\\/][^\s]*/', '[path]', $value) ?? '';
 
         return \substr(\trim($value), 0, self::STDERR_LIMIT);
+    }
+
+    /**
+     * Return diagnostics for a process stage without changing legacy contexts.
+     *
+     * @return array<string, string>
+     */
+    private function context(string $operation, string $stage): array
+    {
+        return $stage === 'convert'
+            ? ['operation' => $operation]
+            : ['operation' => $operation, 'stage' => $stage];
     }
 }

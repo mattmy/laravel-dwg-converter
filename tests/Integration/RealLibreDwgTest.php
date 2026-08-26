@@ -7,12 +7,18 @@ use Mattmy\DwgConverter\Facades\Dwg;
 
 $repository = \dirname(__DIR__, 4);
 $source = $repository . '/public/dwg/2G.dwg';
+$pngSource = $repository . '/public/dwg/112.05.31.dwg';
+$imageMagick = 'C:/Program Files/ImageMagick-7.1.2-Q16-HDRI/magick.exe';
 $executables = [
     'dwgbmp' => $repository . '/libredwg/dwgbmp.exe',
     'dwg2dxf' => $repository . '/libredwg/dwg2dxf.exe',
-    'dwg2svg' => $repository . '/libredwg/dwg2SVG.exe',
+    'libreoffice' => 'C:/Program Files/LibreOffice/program/soffice.com',
+    'imagemagick' => $imageMagick,
 ];
-$missingIntegrationDependency = PHP_OS_FAMILY !== 'Windows' || ! \is_file($source);
+$missingIntegrationDependency = PHP_OS_FAMILY !== 'Windows'
+    || ! \is_file($source)
+    || ! \is_file($pngSource)
+    || ! \is_file($imageMagick);
 foreach ($executables as $executable) {
     $missingIntegrationDependency = $missingIntegrationDependency || ! \is_file($executable);
 }
@@ -40,9 +46,18 @@ it('converts a real DWG to the selected DXF version', function () use ($source):
         ->and($contents)->toEndWith("0\r\nEOF\r\n");
 })->skip($missingIntegrationDependency, 'Repository Windows fixtures are unavailable.');
 
-it('converts a real DWG to parseable SVG', function () use ($source): void {
-    $contents = Dwg::toSvg($source)->convert()->output();
+it('converts a real DWG to a trimmed PNG preview', function () use ($pngSource): void {
+    $temporaryDirectory = \sys_get_temp_dir() . '/dwg-converter-integration-' . \bin2hex(\random_bytes(8));
+    config()->set('dwg-converter.temporary_directory', $temporaryDirectory);
 
-    expect($contents)->toContain('<svg')
-        ->and($contents)->toContain('</svg>');
+    try {
+        $contents = Dwg::toPng($pngSource)->convert()->output();
+
+        expect($contents)->toStartWith("\x89PNG\r\n\x1a\n");
+    } finally {
+        if (\is_dir($temporaryDirectory)) {
+            expect(\scandir($temporaryDirectory))->toBe(['.', '..']);
+            expect(\rmdir($temporaryDirectory))->toBeTrue();
+        }
+    }
 })->skip($missingIntegrationDependency, 'Repository Windows fixtures are unavailable.');

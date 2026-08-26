@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Mattmy\DwgConverter\Internal;
 
-use DOMDocument;
 use Illuminate\Http\UploadedFile;
 use Mattmy\DwgConverter\DwgBinary;
 use Mattmy\DwgConverter\DwgOutput;
@@ -18,6 +17,12 @@ use Mattmy\DwgConverter\Exceptions\LibreDwgUnavailable;
  */
 final class Converter
 {
+    private const int PNG_SIGNATURE_BYTES = 8;
+
+    private const int PNG_IHDR_BYTES = 24;
+
+    private const int MAX_PNG_DIMENSION = 32_768;
+
     /**
      * @param  array<string, mixed>  $configuration
      */
@@ -105,34 +110,95 @@ final class Converter
     }
 
     /**
-     * Convert the supported 2D portions of a DWG to SVG stdout.
+     * Convert a DWG to a trimmed whole-model-space PNG preview.
      *
      * @throws DwgOperationFailed
      * @throws InvalidDwg
      * @throws LibreDwgUnavailable
      */
-    public function svg(UploadedFile|string|DwgBinary $source): DwgOutput
+    public function png(UploadedFile|string|DwgBinary $source): DwgOutput
     {
-        $operation = 'svg';
-        $configuration = $this->configuration('dwg2svg', $operation);
-        $workspace = $this->workspace($source, $operation, $configuration);
-        $output = $workspace->outputPath('output.svg');
+        $operation = 'png';
+        $dxfConfiguration = $this->configuration('dwg2dxf', $operation);
+        $libreOfficeConfiguration = $this->configuration('libreoffice', $operation);
+        $imageMagickConfiguration = $this->configuration('imagemagick', $operation);
+        $workspace = $this->workspace($source, $operation, $dxfConfiguration);
+        $dxf = $workspace->outputPath('drawing.dxf');
+        $rawPng = $workspace->outputPath('drawing.png');
+        $output = $workspace->outputPath('output.png');
+        $profile = $workspace->outputPath('libreoffice-profile');
 
         try {
-            $executable = $configuration['executable'];
-            $this->processRunner->assertAvailable($executable, $operation);
-            $this->processRunner->run(
-                [$executable, $workspace->inputPath()],
-                $workspace,
-                $configuration['timeout'],
-                $configuration['max_output_bytes'],
-                $operation,
-                $output,
-            );
-            $this->assertBoundedFile($output, $operation, $configuration['max_output_bytes']);
-            $this->assertSvg($output);
+            if (! \mkdir($profile, 0700)) {
+                throw new DwgOperationFailed('output_missing', ['operation' => $operation, 'stage' => 'libreoffice']);
+            }
 
-            return new DwgOutput($workspace, $output, 'svg', 'image/svg+xml', $configuration['max_output_bytes'], $operation);
+            $this->processRunner->assertAvailable($dxfConfiguration['executable'], $operation, 'dwg2dxf', 'dwg2dxf');
+            $this->processRunner->run(
+                [$dxfConfiguration['executable'], '-o', $dxf, $workspace->inputPath()],
+                $workspace,
+                $dxfConfiguration['timeout'],
+                $dxfConfiguration['max_output_bytes'],
+                $operation,
+                null,
+                'dwg2dxf',
+            );
+            $this->assertBoundedFile($dxf, $operation, $dxfConfiguration['max_output_bytes']);
+            $this->assertDxf($dxf, $operation);
+
+            $this->processRunner->assertAvailable($libreOfficeConfiguration['executable'], $operation, 'libreoffice', 'libreoffice');
+            $this->processRunner->run(
+                [
+                    $libreOfficeConfiguration['executable'],
+                    '-env:UserInstallation=' . $this->fileUrl($profile),
+                    '--headless',
+                    '--nologo',
+                    '--nodefault',
+                    '--nofirststartwizard',
+                    '--norestore',
+                    '--convert-to',
+                    'png:draw_png_Export:PixelWidth=4096,PixelHeight=5792',
+                    '--outdir',
+                    $workspace->directory(),
+                    $dxf,
+                ],
+                $workspace,
+                $libreOfficeConfiguration['timeout'],
+                $libreOfficeConfiguration['max_output_bytes'],
+                $operation,
+                null,
+                'libreoffice',
+            );
+            $this->assertPng($rawPng, $operation, $libreOfficeConfiguration['max_output_bytes']);
+
+            $this->processRunner->assertAvailable($imageMagickConfiguration['executable'], $operation, 'imagemagick', 'imagemagick');
+            $this->processRunner->run(
+                [
+                    $imageMagickConfiguration['executable'],
+                    $rawPng,
+                    '-fuzz',
+                    '2%',
+                    '-trim',
+                    '+repage',
+                    $output,
+                ],
+                $workspace,
+                $imageMagickConfiguration['timeout'],
+                $imageMagickConfiguration['max_output_bytes'],
+                $operation,
+                null,
+                'imagemagick',
+            );
+            $this->assertPng($output, $operation, $imageMagickConfiguration['max_output_bytes']);
+
+            return new DwgOutput(
+                $workspace,
+                $output,
+                'png',
+                'image/png',
+                $imageMagickConfiguration['max_output_bytes'],
+                $operation,
+            );
         } catch (\Throwable $exception) {
             $workspace->cleanup();
 
@@ -290,11 +356,11 @@ final class Converter
      *
      * @throws DwgOperationFailed
      */
-    private function assertDxf(string $path): void
+    private function assertDxf(string $path, string $operation = 'dxf'): void
     {
         $size = \filesize($path);
         if (! \is_int($size)) {
-            throw new DwgOperationFailed('dxf_invalid', ['operation' => 'dxf']);
+            throw new DwgOperationFailed('dxf_invalid', ['operation' => $operation]);
         }
 
         $head = \file_get_contents($path, false, null, 0, \min($size, 4096));
@@ -307,59 +373,51 @@ final class Converter
             && \preg_match('/(?:^|\R)\s*0\REOF\s*$/', $tail) === 1;
 
         if (! $isDxf) {
-            throw new DwgOperationFailed('dxf_invalid', ['operation' => 'dxf']);
+            throw new DwgOperationFailed('dxf_invalid', ['operation' => $operation]);
         }
     }
 
     /**
-     * Parse a local SVG document while rejecting document type declarations.
+     * Validate a bounded PNG signature, IHDR dimensions, and IEND trailer.
      *
      * @throws DwgOperationFailed
      */
-    private function assertSvg(string $path): void
+    private function assertPng(string $path, string $operation, int $maxOutputBytes): void
     {
-        if ($this->hasUnsafeXmlDeclaration($path)) {
-            throw new DwgOperationFailed('svg_invalid', ['operation' => 'svg']);
+        $this->assertBoundedFile($path, $operation, $maxOutputBytes);
+        $size = \filesize($path);
+        $header = \file_get_contents($path, false, null, 0, self::PNG_IHDR_BYTES);
+        if (
+            ! \is_int($size)
+            || ! \is_string($header)
+            || $size < self::PNG_IHDR_BYTES + 12
+            || \substr($header, 0, self::PNG_SIGNATURE_BYTES) !== "\x89PNG\r\n\x1a\n"
+            || \substr($header, 8, 8) !== "\0\0\0\rIHDR"
+            || ! $this->hasPngEnd($path, $size)
+        ) {
+            throw new DwgOperationFailed('png_invalid', ['operation' => $operation]);
         }
 
-        $document = new DOMDocument();
-        if (! $document->load($path, \LIBXML_NONET | \LIBXML_NOERROR | \LIBXML_NOWARNING) || $document->documentElement?->localName !== 'svg') {
-            throw new DwgOperationFailed('svg_invalid', ['operation' => 'svg']);
+        $dimensions = \unpack('Nwidth/Nheight', \substr($header, 16, 8));
+        $width = $dimensions['width'] ?? 0;
+        $height = $dimensions['height'] ?? 0;
+        if ($width < 1 || $height < 1 || $width > self::MAX_PNG_DIMENSION || $height > self::MAX_PNG_DIMENSION) {
+            throw new DwgOperationFailed('png_invalid', ['operation' => $operation]);
         }
     }
 
     /**
-     * Scan the complete SVG stream for declarations that enable entities.
-     *
-     * @throws DwgOperationFailed
+     * Convert an absolute filesystem path into the LibreOffice file URL form.
      */
-    private function hasUnsafeXmlDeclaration(string $path): bool
+    private function fileUrl(string $path): string
     {
-        $stream = \fopen($path, 'rb');
-        if ($stream === false) {
-            throw new DwgOperationFailed('svg_invalid', ['operation' => 'svg']);
+        $segments = \explode('/', \ltrim(\str_replace('\\', '/', $path), '/'));
+        if (\preg_match('/^[A-Za-z]:$/', $segments[0]) === 1) {
+            $drive = \array_shift($segments);
+
+            return 'file:///' . $drive . '/' . \implode('/', \array_map(\rawurlencode(...), $segments));
         }
 
-        $tail = '';
-
-        try {
-            while (! \feof($stream)) {
-                $chunk = \fread($stream, 65536);
-                if ($chunk === false) {
-                    throw new DwgOperationFailed('svg_invalid', ['operation' => 'svg']);
-                }
-
-                $value = \strtolower($tail . $chunk);
-                if (\str_contains($value, '<!doctype') || \str_contains($value, '<!entity')) {
-                    return true;
-                }
-
-                $tail = \substr($value, -16);
-            }
-
-            return false;
-        } finally {
-            \fclose($stream);
-        }
+        return 'file:///' . \implode('/', \array_map(\rawurlencode(...), $segments));
     }
 }

@@ -18,7 +18,12 @@ interface ProcessRunner
      *
      * @throws LibreDwgUnavailable
      */
-    public function assertAvailable(string $executable, string $operation): void;
+    public function assertAvailable(
+        string $executable,
+        string $operation,
+        ?string $expectedTool = null,
+        string $stage = 'convert',
+    ): void;
 
     /**
      * Execute one isolated LibreDWG command.
@@ -35,5 +40,6 @@ interface ProcessRunner
         int $maxOutputBytes,
         string $operation,
         ?string $stdoutPath = null,
+        string $stage = 'convert',
     ): void;
 }

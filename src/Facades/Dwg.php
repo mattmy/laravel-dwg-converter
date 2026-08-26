@@ -10,7 +10,7 @@ use Override;
 
 /**
  * @method static \Mattmy\DwgConverter\Operations\DxfConversion toDxf(\Illuminate\Http\UploadedFile|string|\Mattmy\DwgConverter\DwgBinary $source)
- * @method static \Mattmy\DwgConverter\Operations\SvgConversion toSvg(\Illuminate\Http\UploadedFile|string|\Mattmy\DwgConverter\DwgBinary $source)
+ * @method static \Mattmy\DwgConverter\Operations\PngConversion toPng(\Illuminate\Http\UploadedFile|string|\Mattmy\DwgConverter\DwgBinary $source)
  * @method static \Mattmy\DwgConverter\Operations\ThumbnailExtraction thumbnail(\Illuminate\Http\UploadedFile|string|\Mattmy\DwgConverter\DwgBinary $source)
  *
  * @see DwgManager

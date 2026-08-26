@@ -29,7 +29,7 @@ it('maps invalid published configuration to an environment failure', function (
 ]);
 
 it('checks only the executable needed by the selected operation', function (): void {
-    config()->set('dwg-converter.executables.dwg2svg', '');
+    config()->set('dwg-converter.executables.imagemagick', '');
     $runner = FakeProcessRunner::writesFile(
         'input.png',
         "\x89PNG\r\n\x1a\n" . \str_repeat("\0", 12) . "IEND\xaeB`\x82",

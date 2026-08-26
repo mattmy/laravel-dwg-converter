@@ -7,7 +7,7 @@ namespace Mattmy\DwgConverter;
 use Illuminate\Http\UploadedFile;
 use Mattmy\DwgConverter\Internal\Converter;
 use Mattmy\DwgConverter\Operations\DxfConversion;
-use Mattmy\DwgConverter\Operations\SvgConversion;
+use Mattmy\DwgConverter\Operations\PngConversion;
 use Mattmy\DwgConverter\Operations\ThumbnailExtraction;
 
 /**
@@ -29,11 +29,11 @@ final class DwgManager
     }
 
     /**
-     * Start a DWG to SVG conversion.
+     * Start a DWG to PNG preview conversion.
      */
-    public function toSvg(UploadedFile|string|DwgBinary $source): SvgConversion
+    public function toPng(UploadedFile|string|DwgBinary $source): PngConversion
     {
-        return new SvgConversion($this->converter, $source);
+        return new PngConversion($this->converter, $source);
     }
 
     /**

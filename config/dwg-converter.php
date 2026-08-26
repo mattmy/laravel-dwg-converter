@@ -6,7 +6,8 @@ return [
     'executables' => [
         'dwgbmp' => env('LIBREDWG_DWGBMP', 'dwgbmp'),
         'dwg2dxf' => env('LIBREDWG_DWG2DXF', 'dwg2dxf'),
-        'dwg2svg' => env('LIBREDWG_DWG2SVG', 'dwg2SVG'),
+        'libreoffice' => env('DWG_CONVERTER_LIBREOFFICE', 'soffice'),
+        'imagemagick' => env('DWG_CONVERTER_IMAGEMAGICK', 'magick'),
     ],
     'timeout' => 60,
     'max_input_bytes' => 200 * 1024 * 1024,

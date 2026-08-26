@@ -73,8 +73,12 @@ final class FakeProcessRunner implements ProcessRunner
      * @throws LibreDwgUnavailable
      */
     #[Override]
-    public function assertAvailable(string $executable, string $operation): void
-    {
+    public function assertAvailable(
+        string $executable,
+        string $operation,
+        ?string $expectedTool = null,
+        string $stage = 'convert',
+    ): void {
         if ($this->availabilityFailure instanceof LibreDwgUnavailable) {
             throw $this->availabilityFailure;
         }
@@ -93,6 +97,7 @@ final class FakeProcessRunner implements ProcessRunner
         int $maxOutputBytes,
         string $operation,
         ?string $stdoutPath = null,
+        string $stage = 'convert',
     ): void {
         $this->commands[] = $command;
         $snapshot = \file_get_contents($workspace->inputPath());

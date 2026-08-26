@@ -13,12 +13,12 @@ use Mattmy\DwgConverter\Exceptions\LibreDwgUnavailable;
 use Mattmy\DwgConverter\Internal\Converter;
 
 /**
- * Performs one best-effort DWG to SVG conversion.
+ * Performs one fixed DWG to PNG preview conversion.
  */
-final class SvgConversion
+final class PngConversion
 {
     /**
-     * Create an SVG conversion backed by the shared converter.
+     * Create a PNG preview conversion backed by the shared converter.
      */
     public function __construct(
         private readonly Converter $converter,
@@ -26,7 +26,7 @@ final class SvgConversion
     ) {}
 
     /**
-     * Convert one DWG source to an SVG artifact.
+     * Convert one DWG source to a trimmed PNG preview artifact.
      *
      * @throws DwgOperationFailed
      * @throws InvalidDwg
@@ -34,6 +34,6 @@ final class SvgConversion
      */
     public function convert(): DwgOutput
     {
-        return $this->converter->svg($this->source);
+        return $this->converter->png($this->source);
     }
 }
