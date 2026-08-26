@@ -37,6 +37,50 @@ it('maps a LibreDWG decode failure to invalid input', function (): void {
     }
 });
 
+it('maps a LibreDWG read failure to invalid input', function (): void {
+    $workspace = Workspace::fromSource(
+        DwgBinary::from('AC1032 drawing'),
+        config()->string('dwg-converter.temporary_directory'),
+        1024,
+        'thumbnail',
+    );
+
+    try {
+        expect(fn () => (new SymfonyProcessRunner())->run(
+            [PHP_BINARY, '-r', 'fwrite(STDERR, "Unable to read file input.dwg. ERROR 0x800"); exit(1);'],
+            $workspace,
+            5.0,
+            1024,
+            'thumbnail',
+        ))->toThrow(InvalidDwg::class, 'libredwg_rejected_input');
+    } finally {
+        $workspace->cleanup();
+    }
+});
+
+it('allows a recoverable diagnostic when the process succeeds', function (): void {
+    $workspace = Workspace::fromSource(
+        DwgBinary::from('AC1032 drawing'),
+        config()->string('dwg-converter.temporary_directory'),
+        1024,
+        'dxf',
+    );
+
+    try {
+        (new SymfonyProcessRunner())->run(
+            [PHP_BINARY, '-r', 'fwrite(STDERR, "warning: unsupported object");'],
+            $workspace,
+            5.0,
+            1024,
+            'dxf',
+        );
+
+        expect($workspace->directory())->toBeDirectory();
+    } finally {
+        $workspace->cleanup();
+    }
+});
+
 it('maps process timeout without leaving a workspace', function (): void {
     $workspace = Workspace::fromSource(
         DwgBinary::from('AC1032 drawing'),

@@ -33,6 +33,8 @@ $png = Dwg::toPng(storage_path('app/private/drawing.dwg'))->convert();
 
 Sources may be a valid `UploadedFile`, a local absolute path, or bytes explicitly wrapped with `DwgBinary::from()`. A plain string is always treated as a path.
 
+Source binding performs no I/O. `convert()` and `extract()` snapshot the source, reject obvious non-DWG candidates, then rely on the selected LibreDWG command and output validation. Success means the configured LibreDWG build completed this operation without a critical decode failure; it is not a safety certification, full DWG conformance check, or visual-fidelity guarantee. Run untrusted DWG conversions in a resource-limited worker or container with current external-tool security patches.
+
 `thumbnail()` extracts an embedded preview rather than rendering the drawing. A DWG may have no preview, and the result may be BMP, PNG, or WMF. `toPng()` runs LibreDWG, LibreOffice headlessly, then ImageMagick trim to create a best-effort whole-model-space preview; it does not split drawings or promise AutoCAD visual fidelity.
 
 Each operation returns a one-time `DwgOutput`. `output()` loads the complete artifact into PHP memory; prefer Laravel Storage streaming for normal file delivery:

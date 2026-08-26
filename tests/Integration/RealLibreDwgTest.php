@@ -2,7 +2,9 @@
 
 declare(strict_types=1);
 
+use Mattmy\DwgConverter\DwgBinary;
 use Mattmy\DwgConverter\DxfVersion;
+use Mattmy\DwgConverter\Exceptions\InvalidDwg;
 use Mattmy\DwgConverter\Facades\Dwg;
 
 $repository = \dirname(__DIR__, 4);
@@ -22,6 +24,9 @@ $missingIntegrationDependency = PHP_OS_FAMILY !== 'Windows'
 foreach ($executables as $executable) {
     $missingIntegrationDependency = $missingIntegrationDependency || ! \is_file($executable);
 }
+$missingLibreDwg = PHP_OS_FAMILY !== 'Windows'
+    || ! \is_file($executables['dwgbmp'])
+    || ! \is_file($executables['dwg2dxf']);
 
 beforeEach(function () use ($executables): void {
     config()->set('dwg-converter.executables', $executables);
@@ -61,3 +66,20 @@ it('converts a real DWG to a trimmed PNG preview', function () use ($pngSource):
         }
     }
 })->skip($missingIntegrationDependency, 'Repository Windows fixtures are unavailable.');
+
+it('rejects forged DWG bytes through every public operation', function (string $operation): void {
+    $source = DwgBinary::from('AC1032 forged bytes');
+
+    $operationResult = match ($operation) {
+        'dxf' => static fn () => Dwg::toDxf($source)->convert(),
+        'png' => static fn () => Dwg::toPng($source)->convert(),
+        'thumbnail' => static fn () => Dwg::thumbnail($source)->extract(),
+        default => throw new RuntimeException('Unknown acceptance operation.'),
+    };
+
+    expect($operationResult)->toThrow(InvalidDwg::class, 'libredwg_rejected_input');
+})->with([
+    'DXF' => ['dxf'],
+    'PNG' => ['png'],
+    'thumbnail' => ['thumbnail'],
+])->skip($missingLibreDwg, 'Repository LibreDWG binaries are unavailable.');

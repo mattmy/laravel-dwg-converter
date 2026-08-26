@@ -146,7 +146,7 @@ final class SymfonyProcessRunner implements ProcessRunner
     {
         $stderr = \strtolower($stderr);
 
-        foreach (['read error', 'failed to decode', 'dwg too small', 'invalid dwg'] as $indicator) {
+        foreach (['unable to read file', 'read error', 'failed to decode', 'dwg too small', 'invalid dwg'] as $indicator) {
             if (\str_contains($stderr, $indicator)) {
                 return true;
             }
