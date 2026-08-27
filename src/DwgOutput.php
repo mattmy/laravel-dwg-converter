@@ -32,7 +32,7 @@ final class DwgOutput
         private readonly string $path,
         private readonly string $extension,
         private readonly string $mimeType,
-        private readonly int $maxOutputBytes,
+        private readonly ?int $maxOutputBytes,
         private readonly string $operation,
     ) {}
 
@@ -141,7 +141,7 @@ final class DwgOutput
             throw new DwgOperationFailed('output_missing', ['operation' => $this->operation]);
         }
 
-        if ($size > $this->maxOutputBytes) {
+        if ($this->maxOutputBytes !== null && $size > $this->maxOutputBytes) {
             throw new DwgOperationFailed('output_too_large', ['operation' => $this->operation]);
         }
     }

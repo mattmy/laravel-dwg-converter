@@ -32,10 +32,10 @@ final class Workspace
     public static function fromSource(
         UploadedFile|string|DwgBinary $source,
         string $temporaryDirectory,
-        int $maxInputBytes,
+        ?int $maxInputBytes,
         string $operation,
     ): self {
-        if (! self::isAbsolutePath($temporaryDirectory) || $maxInputBytes < 1) {
+        if (! self::isAbsolutePath($temporaryDirectory)) {
             throw new DwgOperationFailed('invalid_configuration', ['operation' => $operation]);
         }
 
@@ -161,7 +161,7 @@ final class Workspace
      * @throws DwgOperationFailed
      * @throws InvalidDwg
      */
-    private function snapshot(UploadedFile|string|DwgBinary $source, int $maxInputBytes, string $operation): void
+    private function snapshot(UploadedFile|string|DwgBinary $source, ?int $maxInputBytes, string $operation): void
     {
         if ($source instanceof DwgBinary) {
             $this->writeBinary($source->contents(), $maxInputBytes, $operation);
@@ -225,12 +225,12 @@ final class Workspace
     }
 
     /**
-     * Copy a local file with a strict byte limit.
+     * Copy a local file while enforcing its enabled byte limit.
      *
      * @throws DwgOperationFailed
      * @throws InvalidDwg
      */
-    private function copyPath(string $path, int $maxInputBytes, string $operation): void
+    private function copyPath(string $path, ?int $maxInputBytes, string $operation): void
     {
         $input = \fopen($path, 'rb');
         $output = \fopen($this->inputPath(), 'xb');
@@ -256,9 +256,9 @@ final class Workspace
      * @throws DwgOperationFailed
      * @throws InvalidDwg
      */
-    private function writeBinary(string $contents, int $maxInputBytes, string $operation): void
+    private function writeBinary(string $contents, ?int $maxInputBytes, string $operation): void
     {
-        if (\strlen($contents) > $maxInputBytes) {
+        if ($maxInputBytes !== null && \strlen($contents) > $maxInputBytes) {
             throw new InvalidDwg('input_too_large', ['operation' => $operation]);
         }
 
@@ -268,7 +268,7 @@ final class Workspace
     }
 
     /**
-     * Copy a stream to the snapshot while enforcing its maximum size.
+     * Copy a stream to the snapshot while enforcing its enabled maximum size.
      *
      * @param  resource  $input
      * @param  resource  $output
@@ -276,7 +276,7 @@ final class Workspace
      * @throws DwgOperationFailed
      * @throws InvalidDwg
      */
-    private function copyStream($input, $output, int $maxInputBytes, string $operation): void
+    private function copyStream($input, $output, ?int $maxInputBytes, string $operation): void
     {
         $bytes = 0;
         while (! \feof($input)) {
@@ -286,7 +286,7 @@ final class Workspace
             }
 
             $bytes += \strlen($chunk);
-            if ($bytes > $maxInputBytes) {
+            if ($maxInputBytes !== null && $bytes > $maxInputBytes) {
                 throw new InvalidDwg('input_too_large', ['operation' => $operation]);
             }
 

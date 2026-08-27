@@ -135,19 +135,19 @@ final class Converter
                 [$executable, '-O', 'JSON', '-o', $output, $workspace->inputPath()],
                 $workspace,
                 $configuration['timeout'],
-                $configuration['max_json_output_bytes'],
+                $configuration['effective_output_limit'],
                 $operation,
                 null,
                 'dwgread',
             );
-            $this->assertJson($output, $workspace, $configuration['max_json_output_bytes']);
+            $this->assertJson($output, $workspace, $configuration['effective_output_limit']);
 
             return new DwgOutput(
                 $workspace,
                 $output,
                 'json',
                 'application/json',
-                $configuration['max_json_output_bytes'],
+                $configuration['effective_output_limit'],
                 $operation,
             );
         } catch (\Throwable $exception) {
@@ -273,7 +273,7 @@ final class Converter
     /**
      * Normalize settings and prepare a source snapshot for one operation.
      *
-     * @param  array{executable: string, timeout: float, max_input_bytes: int, max_output_bytes: int, temporary_directory: string}  $configuration
+     * @param  array{executable: string, timeout: float, max_input_bytes: ?int, max_output_bytes: ?int, temporary_directory: string}  $configuration
      *
      * @throws DwgOperationFailed
      * @throws InvalidDwg
@@ -294,7 +294,7 @@ final class Converter
     /**
      * Validate and normalize the settings needed by one operation.
      *
-     * @return array{executable: string, timeout: float, max_input_bytes: int, max_output_bytes: int, temporary_directory: string}
+     * @return array{executable: string, timeout: float, max_input_bytes: ?int, max_output_bytes: ?int, temporary_directory: string}
      *
      * @throws LibreDwgUnavailable
      */
@@ -303,8 +303,8 @@ final class Converter
         $executables = $this->configuration['executables'] ?? null;
         $executable = \is_array($executables) ? ($executables[$executableKey] ?? null) : null;
         $timeout = $this->configuration['timeout'] ?? null;
-        $maxInputBytes = $this->configuration['max_input_bytes'] ?? null;
-        $maxOutputBytes = $this->configuration['max_output_bytes'] ?? null;
+        $maxInputBytes = $this->normalizeByteLimit($this->configuration['max_input_bytes'] ?? null, $operation);
+        $maxOutputBytes = $this->normalizeByteLimit($this->configuration['max_output_bytes'] ?? null, $operation);
         $temporaryDirectory = $this->configuration['temporary_directory'] ?? null;
         $validTimeout = (\is_int($timeout) || \is_float($timeout))
             && \is_finite((float) $timeout)
@@ -315,10 +315,6 @@ final class Converter
         if (
             ! \is_string($executable)
             || ! $validTimeout
-            || ! \is_int($maxInputBytes)
-            || $maxInputBytes < 1
-            || ! \is_int($maxOutputBytes)
-            || $maxOutputBytes < 1
             || ! $validDirectory
         ) {
             throw new LibreDwgUnavailable('invalid_configuration', ['operation' => $operation]);
@@ -334,28 +330,59 @@ final class Converter
     }
 
     /**
-     * Validate the extra bounded-memory setting required by JSON validation.
+     * Normalize the JSON-specific limit and derive its effective output limit.
      *
-     * @return array{executable: string, timeout: float, max_input_bytes: int, max_output_bytes: int, max_json_output_bytes: int, temporary_directory: string}
+     * @return array{executable: string, timeout: float, max_input_bytes: ?int, max_output_bytes: ?int, max_json_output_bytes: ?int, effective_output_limit: ?int, temporary_directory: string}
      *
      * @throws LibreDwgUnavailable
      */
     private function jsonConfiguration(string $operation): array
     {
         $configuration = $this->configuration('dwgread', $operation);
-        $maxJsonOutputBytes = $this->configuration['max_json_output_bytes'] ?? null;
-        if (
-            ! \is_int($maxJsonOutputBytes)
-            || $maxJsonOutputBytes < 1
-            || $maxJsonOutputBytes > $configuration['max_output_bytes']
-        ) {
-            throw new LibreDwgUnavailable('invalid_configuration', ['operation' => $operation]);
-        }
+        $maxJsonOutputBytes = $this->normalizeByteLimit($this->configuration['max_json_output_bytes'] ?? null, $operation);
 
         return [
             ...$configuration,
             'max_json_output_bytes' => $maxJsonOutputBytes,
+            'effective_output_limit' => $this->effectiveOutputLimit(
+                $configuration['max_output_bytes'],
+                $maxJsonOutputBytes,
+            ),
         ];
+    }
+
+    /**
+     * Normalize one nullable byte limit from the published configuration boundary.
+     *
+     * @throws LibreDwgUnavailable
+     */
+    private function normalizeByteLimit(mixed $value, string $operation): ?int
+    {
+        if ($value === null) {
+            return null;
+        }
+
+        if (! \is_int($value)) {
+            throw new LibreDwgUnavailable('invalid_configuration', ['operation' => $operation]);
+        }
+
+        return $value > 0 ? $value : null;
+    }
+
+    /**
+     * Return the stricter active output limit, if either limit is enabled.
+     */
+    private function effectiveOutputLimit(?int $maxOutputBytes, ?int $maxJsonOutputBytes): ?int
+    {
+        if ($maxOutputBytes === null) {
+            return $maxJsonOutputBytes;
+        }
+
+        if ($maxJsonOutputBytes === null) {
+            return $maxOutputBytes;
+        }
+
+        return \min($maxOutputBytes, $maxJsonOutputBytes);
     }
 
     /**
@@ -392,7 +419,7 @@ final class Converter
      *
      * @throws DwgOperationFailed
      */
-    private function thumbnailType(string $path, Workspace $workspace, int $maxOutputBytes): array
+    private function thumbnailType(string $path, Workspace $workspace, ?int $maxOutputBytes): array
     {
         $this->assertBoundedFile($path, $workspace, 'thumbnail', $maxOutputBytes);
         $size = \filesize($path);
@@ -428,7 +455,7 @@ final class Converter
         string $path,
         Workspace $workspace,
         string $operation,
-        int $maxOutputBytes,
+        ?int $maxOutputBytes,
     ): void {
         if (\is_link($path) || ! \is_file($path) || ! $workspace->owns($path)) {
             throw new DwgOperationFailed('output_missing', ['operation' => $operation]);
@@ -439,7 +466,7 @@ final class Converter
             throw new DwgOperationFailed('output_missing', ['operation' => $operation]);
         }
 
-        if ($size > $maxOutputBytes) {
+        if ($maxOutputBytes !== null && $size > $maxOutputBytes) {
             throw new DwgOperationFailed('output_too_large', ['operation' => $operation]);
         }
     }
@@ -475,7 +502,7 @@ final class Converter
      *
      * @throws DwgOperationFailed
      */
-    private function assertJson(string $path, Workspace $workspace, int $maxOutputBytes): void
+    private function assertJson(string $path, Workspace $workspace, ?int $maxOutputBytes): void
     {
         $this->assertBoundedFile($path, $workspace, 'json', $maxOutputBytes);
         $contents = \file_get_contents($path);
@@ -507,7 +534,7 @@ final class Converter
         ImageFormat $format,
         Workspace $workspace,
         string $operation,
-        int $maxOutputBytes,
+        ?int $maxOutputBytes,
     ): void {
         $this->assertBoundedFile($path, $workspace, $operation, $maxOutputBytes);
         $size = \filesize($path);

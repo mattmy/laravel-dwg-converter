@@ -94,6 +94,19 @@ it('converts a real DWG to valid structural JSON', function () use ($source): vo
         ->and($contents)->toContain('"OBJECTS"');
 })->skip($missingJsonDependency, $integrationSkipReason);
 
+it('converts a real DWG with all byte limits disabled', function () use ($source): void {
+    config()->set('dwg-converter.max_input_bytes', 0);
+    config()->set('dwg-converter.max_output_bytes', 0);
+    config()->set('dwg-converter.max_json_output_bytes', 0);
+
+    $contents = Dwg::toJson($source)->convert()->output();
+
+    expect(\json_validate($contents))->toBeTrue()
+        ->and($contents)->toContain('"FILEHEADER"')
+        ->and($contents)->toContain('"HEADER"')
+        ->and($contents)->toContain('"OBJECTS"');
+})->skip($missingJsonDependency, $integrationSkipReason);
+
 it('converts a real DWG to each trimmed image format', function (ImageFormat $format) use ($imageSource): void {
     $temporaryDirectory = \sys_get_temp_dir() . '/dwg-converter-integration-' . \bin2hex(\random_bytes(8));
     config()->set('dwg-converter.temporary_directory', $temporaryDirectory);

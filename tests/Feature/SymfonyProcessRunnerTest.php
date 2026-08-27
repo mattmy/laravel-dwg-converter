@@ -128,6 +128,31 @@ it('stops stdout that exceeds the configured limit', function (): void {
     }
 });
 
+it('allows stdout of any size when its limit is disabled', function (): void {
+    $workspace = Workspace::fromSource(
+        DwgBinary::from('AC1032 drawing'),
+        config()->string('dwg-converter.temporary_directory'),
+        null,
+        'png',
+    );
+
+    try {
+        $output = $workspace->outputPath('output.png');
+        (new SymfonyProcessRunner())->run(
+            [PHP_BINARY, '-r', 'echo str_repeat("x", 1024);'],
+            $workspace,
+            5.0,
+            null,
+            'png',
+            $output,
+        );
+
+        expect(\filesize($output))->toBe(1024);
+    } finally {
+        $workspace->cleanup();
+    }
+});
+
 it('redacts paths from a generic process failure', function (): void {
     $workspace = Workspace::fromSource(
         DwgBinary::from('AC1032 drawing'),

@@ -22,8 +22,8 @@ it('maps invalid published configuration to an environment failure', function (
 })->with([
     'timeout type' => ['timeout', 'fast'],
     'timeout range' => ['timeout', 0],
-    'input limit' => ['max_input_bytes', 0],
-    'output limit' => ['max_output_bytes', -1],
+    'input limit type' => ['max_input_bytes', 'large'],
+    'output limit type' => ['max_output_bytes', 1.5],
     'temporary root' => ['temporary_directory', 'relative/path'],
     'executables shape' => ['executables', 'dwgbmp'],
 ]);
@@ -47,7 +47,7 @@ it('preserves an executable availability failure', function (): void {
             array $_command,
             Workspace $_workspace,
             float $_timeout,
-            int $_maxOutputBytes,
+            ?int $_maxOutputBytes,
             string $_operation,
             ?string $_stdoutPath,
         ): void {},
@@ -64,7 +64,7 @@ it('preserves a stable process failure', function (): void {
         array $_command,
         Workspace $_workspace,
         float $_timeout,
-        int $_maxOutputBytes,
+        ?int $_maxOutputBytes,
         string $_operation,
         ?string $_stdoutPath,
     ): void {

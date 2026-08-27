@@ -51,17 +51,23 @@ it('rejects JSON output above its dedicated validation limit', function (): void
         ->toThrow(DwgOperationFailed::class, 'output_too_large');
 });
 
-it('rejects an invalid JSON validation limit', function (): void {
-    config()->set('dwg-converter.max_json_output_bytes', 0);
+it('rejects a non-integer JSON validation limit', function (): void {
+    config()->set('dwg-converter.max_json_output_bytes', 'large');
 
     expect(fn () => Dwg::toJson(DwgBinary::from('AC1032 drawing'))->convert())
         ->toThrow(LibreDwgUnavailable::class, 'invalid_configuration');
 });
 
-it('rejects a JSON validation limit above the general output limit', function (): void {
+it('uses the general output limit when it is lower than the JSON limit', function (): void {
     config()->set('dwg-converter.max_output_bytes', 64);
     config()->set('dwg-converter.max_json_output_bytes', 65);
+    $runner = FakeProcessRunner::writesFile(
+        'drawing.json',
+        '{"created_by":"LibreDWG 0.14","FILEHEADER":{},"HEADER":{},"OBJECTS":{},"padding":"' .
+            str_repeat('x', 64) . '"}',
+    );
+    app()->instance(ProcessRunner::class, $runner);
 
     expect(fn () => Dwg::toJson(DwgBinary::from('AC1032 drawing'))->convert())
-        ->toThrow(LibreDwgUnavailable::class, 'invalid_configuration');
+        ->toThrow(DwgOperationFailed::class, 'output_too_large');
 });

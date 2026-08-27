@@ -37,7 +37,7 @@ interface ProcessRunner
         array $command,
         Workspace $workspace,
         float $timeout,
-        int $maxOutputBytes,
+        ?int $maxOutputBytes,
         string $operation,
         ?string $stdoutPath = null,
         string $stage = 'convert',

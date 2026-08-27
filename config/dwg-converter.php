@@ -11,6 +11,7 @@ return [
         'imagemagick' => env('DWG_CONVERTER_IMAGEMAGICK', 'magick'),
     ],
     'timeout' => 60,
+    // Use null, zero, or a negative integer to disable any byte limit.
     'max_input_bytes' => 200 * 1024 * 1024,
     'max_output_bytes' => 512 * 1024 * 1024,
     'max_json_output_bytes' => 64 * 1024 * 1024,

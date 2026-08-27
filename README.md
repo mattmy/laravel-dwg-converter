@@ -47,6 +47,8 @@ Source binding performs no I/O. `convert()` and `extract()` snapshot the source,
 
 `toJson()` runs `dwgread` and returns LibreDWG's native structural JSON dump. It is an opaque artifact for inspection or downstream processing, not a stable application schema, GeoJSON, or a full-fidelity guarantee. It deliberately has no `usingDxfVersion()` because `dwgread` has no `--as` option and preserves the source DWG version. JSON can expand substantially beyond the DWG; its default `max_json_output_bytes` is 64 MiB, and JSON syntax is validated before return. Use `storeAs()` instead of `output()` for normal delivery.
 
+The default byte limits are 200 MiB input, 512 MiB output, and 64 MiB JSON. Each limit is disabled when its runtime config key is absent or its value is `null`, zero, or negative; only positive integers enforce a limit. For JSON, active `max_output_bytes` and `max_json_output_bytes` are combined by taking the smaller value. Do not disable limits for untrusted drawings unless the worker separately has adequate memory, CPU, and disk limits.
+
 `format()` accepts only `ImageFormat::PNG`, `ImageFormat::JPEG`, or `ImageFormat::WEBP`. `usingDxfVersion()` controls only the intermediate `dwg2dxf --as` target. `atResolution()` chooses the pre-trim LibreOffice export canvas: `HIGH` (default, 4096×5792), `MEDIUM` (2048×2896), or `LOW` (1024×1448). The trimmed image dimensions depend on drawing content.
 
 Each operation returns a one-time `DwgOutput`. `output()` loads the complete artifact into PHP memory; prefer Laravel Storage streaming for normal file delivery:

@@ -70,7 +70,7 @@ final class SymfonyProcessRunner implements ProcessRunner
         array $command,
         Workspace $workspace,
         float $timeout,
-        int $maxOutputBytes,
+        ?int $maxOutputBytes,
         string $operation,
         ?string $stdoutPath = null,
         string $stage = 'convert',
@@ -107,7 +107,7 @@ final class SymfonyProcessRunner implements ProcessRunner
                 }
 
                 $position = \ftell($stream);
-                if ($position === false || $position > $maxOutputBytes) {
+                if ($position === false || ($maxOutputBytes !== null && $position > $maxOutputBytes)) {
                     $tooLarge = true;
                     $process->stop();
                 }

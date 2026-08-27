@@ -87,7 +87,7 @@ function successfulImageRunner(): FakeProcessRunner
         array $command,
         Workspace $workspace,
         float $_timeout,
-        int $_maxOutputBytes,
+        ?int $_maxOutputBytes,
         string $_operation,
         ?string $_stdoutPath,
     ): void {

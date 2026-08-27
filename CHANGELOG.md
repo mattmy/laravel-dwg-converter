@@ -8,3 +8,4 @@
 - Replace the unshipped SVG operation with the fixed DXF, LibreOffice PNG, and ImageMagick raster pipeline.
 - Add PNG, JPEG, and WebP output formats, intermediate DXF-version selection, and HIGH, MEDIUM, LOW preview-resolution presets.
 - Add `Dwg::toJson($source)->convert()` for validated LibreDWG structural JSON output.
+- Allow missing, null, zero, and negative byte-limit settings to disable their respective limits.

@@ -22,7 +22,7 @@ final class FakeProcessRunner implements ProcessRunner
     public array $inputSnapshots = [];
 
     /**
-     * @param  Closure(list<string>, Workspace, float, int, string, ?string): void  $run
+     * @param  Closure(list<string>, Workspace, float, ?int, string, ?string): void  $run
      */
     public function __construct(
         private readonly Closure $run,
@@ -38,7 +38,7 @@ final class FakeProcessRunner implements ProcessRunner
             array $_command,
             Workspace $workspace,
             float $_timeout,
-            int $_maxOutputBytes,
+            ?int $_maxOutputBytes,
             string $_operation,
             ?string $_stdoutPath,
         ) use ($name, $contents): void {
@@ -75,7 +75,7 @@ final class FakeProcessRunner implements ProcessRunner
         array $command,
         Workspace $workspace,
         float $timeout,
-        int $maxOutputBytes,
+        ?int $maxOutputBytes,
         string $operation,
         ?string $stdoutPath = null,
         string $stage = 'convert',
