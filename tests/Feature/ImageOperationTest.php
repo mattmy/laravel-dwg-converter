@@ -65,6 +65,21 @@ function libreOfficeImageFormat(array $command): ImageFormat
     };
 }
 
+/**
+ * Return the final argument from a process command recorded by the fake.
+ *
+ * @param  list<string>  $command
+ */
+function lastCommandArgument(array $command): string
+{
+    $argument = \array_pop($command);
+    if (! \is_string($argument)) {
+        throw new RuntimeException('Fake process command is unexpectedly empty.');
+    }
+
+    return $argument;
+}
+
 /** Create a fake that completes every image conversion stage. */
 function successfulImageRunner(): FakeProcessRunner
 {
@@ -82,7 +97,7 @@ function successfulImageRunner(): FakeProcessRunner
             $format = libreOfficeImageFormat($command);
             \file_put_contents($workspace->outputPath('drawing.' . $format->value), imageFixture($format));
         } elseif ($command[0] === 'magick') {
-            $output = $command[\array_key_last($command)];
+            $output = lastCommandArgument($command);
             $format = match (\pathinfo($output, PATHINFO_EXTENSION)) {
                 'png' => ImageFormat::PNG,
                 'jpg' => ImageFormat::JPEG,
@@ -123,7 +138,7 @@ it('uses each supported image format throughout the raster pipeline', function (
         ->and($image->mimeType())->toBe($mimeType)
         ->and($runner->commands[1])->toContain($filter)
         ->and($runner->commands[2][1])->toEndWith('drawing.' . $extension)
-        ->and($runner->commands[2][\array_key_last($runner->commands[2])])->toEndWith('output.' . $extension);
+        ->and(lastCommandArgument($runner->commands[2]))->toEndWith('output.' . $extension);
 
     if ($format === ImageFormat::JPEG) {
         expect($runner->commands[2])->toContain('-background', 'white', '-alpha', 'remove', 'off');
@@ -168,13 +183,13 @@ it('keeps image options isolated and order-independent', function (): void {
 
     expect($runner->commands[0])->toContain('--as', 'r2018')
         ->and($runner->commands[1])->toContain('webp:draw_webp_Export:{"PixelHeight":{"type":"long","value":"2896"},"PixelWidth":{"type":"long","value":"2048"}}')
-        ->and($runner->commands[2][\array_key_last($runner->commands[2])])->toEndWith('output.webp')
+        ->and(lastCommandArgument($runner->commands[2]))->toEndWith('output.webp')
         ->and($runner->commands[3])->toContain('--as', 'r2007')
         ->and($runner->commands[4])->toContain('jpg:draw_jpg_Export:{"PixelHeight":{"type":"long","value":"1448"},"PixelWidth":{"type":"long","value":"1024"}}')
-        ->and($runner->commands[5][\array_key_last($runner->commands[5])])->toEndWith('output.jpg')
+        ->and(lastCommandArgument($runner->commands[5]))->toEndWith('output.jpg')
         ->and($runner->commands[6])->not->toContain('--as')
         ->and($runner->commands[7])->toContain('png:draw_png_Export:{"PixelHeight":{"type":"long","value":"5792"},"PixelWidth":{"type":"long","value":"4096"}}')
-        ->and($runner->commands[8][\array_key_last($runner->commands[8])])->toEndWith('output.png');
+        ->and(lastCommandArgument($runner->commands[8]))->toEndWith('output.png');
 });
 
 it('stops the image pipeline when LibreOffice produces no preview', function (): void {
@@ -213,7 +228,7 @@ it('rejects malformed final images', function (ImageFormat $format): void {
             $format = libreOfficeImageFormat($command);
             \file_put_contents($workspace->outputPath('drawing.' . $format->value), imageFixture($format));
         } elseif ($command[0] === 'magick') {
-            \file_put_contents($command[\array_key_last($command)], 'not an image');
+            \file_put_contents(lastCommandArgument($command), 'not an image');
         }
     });
     app()->instance(ProcessRunner::class, $runner);

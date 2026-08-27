@@ -21,6 +21,16 @@
             "Mattmy\\DwgConverter\\Tests\\": "tests/"
         }
     },
+    "archive": {
+        "exclude": [
+            "/.github",
+            "/tests",
+            "/vendor",
+            "/composer.lock",
+            "*.dwg",
+            "*.exe"
+        ]
+    },
     "require-dev": {
         "larastan/larastan": "^3.0",
         "laravel/pint": "^1.29",

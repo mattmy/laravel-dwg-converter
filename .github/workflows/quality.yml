@@ -3,17 +3,67 @@ name: Quality
 on:
   pull_request:
   push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   quality:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.5'
+          extensions: dom
+          coverage: none
+      - run: composer validate --strict
+      - run: composer update --no-interaction --prefer-dist --with-all-dependencies
+      - run: vendor/bin/pint --test
+      - run: composer analyse
+      - run: composer audit
+
+  tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
     strategy:
+      fail-fast: false
       matrix:
         include:
           - php: '8.3'
-            dependencies: lowest
+            laravel: '12.0'
+            testbench: '10.0'
+            flags: '--prefer-lowest --prefer-stable'
+          - php: '8.3'
+            laravel: '12.0'
+            testbench: '10.0'
+            flags: ''
+          - php: '8.3'
+            laravel: '13.0'
+            testbench: '11.0'
+            flags: ''
+          - php: '8.4'
+            laravel: '12.0'
+            testbench: '10.0'
+            flags: ''
+          - php: '8.4'
+            laravel: '13.0'
+            testbench: '11.0'
+            flags: ''
           - php: '8.5'
-            dependencies: current
+            laravel: '12.0'
+            testbench: '10.0'
+            flags: ''
+          - php: '8.5'
+            laravel: '13.0'
+            testbench: '11.0'
+            flags: ''
     steps:
       - uses: actions/checkout@v4
       - uses: shivammathur/setup-php@v2
@@ -21,9 +71,34 @@ jobs:
           php-version: ${{ matrix.php }}
           extensions: dom
           coverage: none
-      - run: composer update --no-interaction --prefer-dist ${{ matrix.dependencies == 'lowest' && '--prefer-lowest --prefer-stable' || '' }}
-      - run: composer validate --strict
-      - run: vendor/bin/pint --test
-      - run: vendor/bin/phpstan analyse
-      - run: vendor/bin/pest
-      - run: composer audit
+      - name: Resolve the selected Laravel compatibility set
+        run: >-
+          composer update --no-interaction --prefer-dist --with-all-dependencies
+          --with=illuminate/filesystem:^${{ matrix.laravel }}
+          --with=illuminate/http:^${{ matrix.laravel }}
+          --with=illuminate/support:^${{ matrix.laravel }}
+          --with=orchestra/testbench:^${{ matrix.testbench }}
+          ${{ matrix.flags }}
+      - run: php --version
+      - run: composer show illuminate/support orchestra/testbench
+      - run: vendor/bin/pest --testsuite=Unit,Feature
+
+  archive:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.5'
+          coverage: none
+      - run: composer archive --format=zip --file=laravel-dwg-converter
+      - name: Verify the Composer archive
+        run: |
+          unzip -l laravel-dwg-converter.zip | tee archive-contents.txt
+          grep -q 'composer.json' archive-contents.txt
+          grep -q 'src/' archive-contents.txt
+          grep -q 'config/' archive-contents.txt
+          grep -q 'README.md' archive-contents.txt
+          grep -q 'LICENSE' archive-contents.txt
+          ! grep -Eq '(^|/)(\.github|vendor|tests|composer\.lock)(/|$)|\.(exe|dwg)$' archive-contents.txt
