@@ -11,6 +11,7 @@ use Override;
 /**
  * @method static \Mattmy\DwgConverter\Operations\DxfConversion toDxf(\Illuminate\Http\UploadedFile|string|\Mattmy\DwgConverter\DwgBinary $source)
  * @method static \Mattmy\DwgConverter\Operations\ImageConversion toImage(\Illuminate\Http\UploadedFile|string|\Mattmy\DwgConverter\DwgBinary $source)
+ * @method static \Mattmy\DwgConverter\Operations\JsonConversion toJson(\Illuminate\Http\UploadedFile|string|\Mattmy\DwgConverter\DwgBinary $source)
  * @method static \Mattmy\DwgConverter\Operations\ThumbnailExtraction thumbnail(\Illuminate\Http\UploadedFile|string|\Mattmy\DwgConverter\DwgBinary $source)
  *
  * @see DwgManager

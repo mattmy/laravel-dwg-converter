@@ -19,6 +19,7 @@ $imageSource = $environment('DWG_CONVERTER_TEST_IMAGE_DWG');
 $executables = [
     'dwgbmp' => $environment('LIBREDWG_DWGBMP'),
     'dwg2dxf' => $environment('LIBREDWG_DWG2DXF'),
+    'dwgread' => $environment('LIBREDWG_DWGREAD'),
     'libreoffice' => $environment('DWG_CONVERTER_LIBREOFFICE'),
     'imagemagick' => $environment('DWG_CONVERTER_IMAGEMAGICK'),
 ];
@@ -31,8 +32,14 @@ foreach ($executables as $executable) {
 }
 $missingLibreDwg = $executables['dwgbmp'] === ''
     || $executables['dwg2dxf'] === ''
+    || $executables['dwgread'] === ''
     || ! \is_file($executables['dwgbmp'])
-    || ! \is_file($executables['dwg2dxf']);
+    || ! \is_file($executables['dwg2dxf'])
+    || ! \is_file($executables['dwgread']);
+$missingJsonDependency = $source === ''
+    || ! \is_file($source)
+    || $executables['dwgread'] === ''
+    || ! \is_file($executables['dwgread']);
 $integrationSkipReason = 'Set DWG_CONVERTER_TEST_DWG, DWG_CONVERTER_TEST_IMAGE_DWG, and all executable environment variables.';
 
 beforeEach(function () use ($executables): void {
@@ -77,6 +84,15 @@ it('converts a real DWG to the selected DXF version', function () use ($source):
     expect($contents)->toContain('SECTION')
         ->and(\preg_match('/(?:^|\R)\h*0\REOF\R?$/', $contents))->toBe(1);
 })->skip($missingIntegrationDependency, $integrationSkipReason);
+
+it('converts a real DWG to valid structural JSON', function () use ($source): void {
+    $contents = Dwg::toJson($source)->convert()->output();
+
+    expect(\json_validate($contents))->toBeTrue()
+        ->and($contents)->toContain('"FILEHEADER"')
+        ->and($contents)->toContain('"HEADER"')
+        ->and($contents)->toContain('"OBJECTS"');
+})->skip($missingJsonDependency, $integrationSkipReason);
 
 it('converts a real DWG to each trimmed image format', function (ImageFormat $format) use ($imageSource): void {
     $temporaryDirectory = \sys_get_temp_dir() . '/dwg-converter-integration-' . \bin2hex(\random_bytes(8));
@@ -139,6 +155,7 @@ it('rejects forged DWG bytes through every public operation', function (string $
     $operationResult = match ($operation) {
         'dxf' => static fn () => Dwg::toDxf($source)->convert(),
         'image' => static fn () => Dwg::toImage($source)->convert(),
+        'json' => static fn () => Dwg::toJson($source)->convert(),
         'thumbnail' => static fn () => Dwg::thumbnail($source)->extract(),
         default => throw new RuntimeException('Unknown acceptance operation.'),
     };
@@ -147,5 +164,6 @@ it('rejects forged DWG bytes through every public operation', function (string $
 })->with([
     'DXF' => ['dxf'],
     'image' => ['image'],
+    'JSON' => ['json'],
     'thumbnail' => ['thumbnail'],
 ])->skip($missingLibreDwg, $integrationSkipReason);

@@ -8,6 +8,7 @@ use Illuminate\Http\UploadedFile;
 use Mattmy\DwgConverter\Internal\Converter;
 use Mattmy\DwgConverter\Operations\DxfConversion;
 use Mattmy\DwgConverter\Operations\ImageConversion;
+use Mattmy\DwgConverter\Operations\JsonConversion;
 use Mattmy\DwgConverter\Operations\ThumbnailExtraction;
 
 /**
@@ -34,6 +35,14 @@ final class DwgManager
     public function toImage(UploadedFile|string|DwgBinary $source): ImageConversion
     {
         return new ImageConversion($this->converter, $source);
+    }
+
+    /**
+     * Start a DWG to LibreDWG structural JSON conversion.
+     */
+    public function toJson(UploadedFile|string|DwgBinary $source): JsonConversion
+    {
+        return new JsonConversion($this->converter, $source);
     }
 
     /**

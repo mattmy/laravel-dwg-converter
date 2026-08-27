@@ -15,7 +15,7 @@ use Mattmy\DwgConverter\ImageFormat;
 use Mattmy\DwgConverter\ImageResolution;
 
 /**
- * Implements the three fixed LibreDWG operations behind the public builders.
+ * Implements the fixed LibreDWG operations behind the public builders.
  */
 final class Converter
 {
@@ -24,6 +24,9 @@ final class Converter
     private const int PNG_IHDR_BYTES = 24;
 
     private const int MAX_IMAGE_DIMENSION = 32_768;
+
+    /** @var list<string> */
+    private const array JSON_REQUIRED_MARKERS = ['"FILEHEADER"', '"HEADER"', '"OBJECTS"'];
 
     /**
      * @param  array<string, mixed>  $configuration
@@ -104,6 +107,49 @@ final class Converter
             $this->assertDxf($output);
 
             return new DwgOutput($workspace, $output, 'dxf', 'application/dxf', $configuration['max_output_bytes'], $operation);
+        } catch (\Throwable $exception) {
+            $workspace->cleanup();
+
+            throw $exception;
+        }
+    }
+
+    /**
+     * Convert a DWG to LibreDWG's native structural JSON representation.
+     *
+     * @throws DwgOperationFailed
+     * @throws InvalidDwg
+     * @throws LibreDwgUnavailable
+     */
+    public function json(UploadedFile|string|DwgBinary $source): DwgOutput
+    {
+        $operation = 'json';
+        $configuration = $this->jsonConfiguration($operation);
+        $workspace = $this->workspace($source, $operation, $configuration);
+        $output = $workspace->outputPath('drawing.json');
+
+        try {
+            $executable = $configuration['executable'];
+            $this->processRunner->assertAvailable($executable, $operation, 'dwgread', 'dwgread');
+            $this->processRunner->run(
+                [$executable, '-O', 'JSON', '-o', $output, $workspace->inputPath()],
+                $workspace,
+                $configuration['timeout'],
+                $configuration['max_json_output_bytes'],
+                $operation,
+                null,
+                'dwgread',
+            );
+            $this->assertJson($output, $workspace, $configuration['max_json_output_bytes']);
+
+            return new DwgOutput(
+                $workspace,
+                $output,
+                'json',
+                'application/json',
+                $configuration['max_json_output_bytes'],
+                $operation,
+            );
         } catch (\Throwable $exception) {
             $workspace->cleanup();
 
@@ -288,6 +334,31 @@ final class Converter
     }
 
     /**
+     * Validate the extra bounded-memory setting required by JSON validation.
+     *
+     * @return array{executable: string, timeout: float, max_input_bytes: int, max_output_bytes: int, max_json_output_bytes: int, temporary_directory: string}
+     *
+     * @throws LibreDwgUnavailable
+     */
+    private function jsonConfiguration(string $operation): array
+    {
+        $configuration = $this->configuration('dwgread', $operation);
+        $maxJsonOutputBytes = $this->configuration['max_json_output_bytes'] ?? null;
+        if (
+            ! \is_int($maxJsonOutputBytes)
+            || $maxJsonOutputBytes < 1
+            || $maxJsonOutputBytes > $configuration['max_output_bytes']
+        ) {
+            throw new LibreDwgUnavailable('invalid_configuration', ['operation' => $operation]);
+        }
+
+        return [
+            ...$configuration,
+            'max_json_output_bytes' => $maxJsonOutputBytes,
+        ];
+    }
+
+    /**
      * Locate exactly one generated preview file without trusting its suffix.
      *
      * @throws DwgOperationFailed
@@ -396,6 +467,33 @@ final class Converter
 
         if (! $isDxf) {
             throw new DwgOperationFailed('dxf_invalid', ['operation' => $operation]);
+        }
+    }
+
+    /**
+     * Validate a bounded LibreDWG JSON artifact without decoding its full structure.
+     *
+     * @throws DwgOperationFailed
+     */
+    private function assertJson(string $path, Workspace $workspace, int $maxOutputBytes): void
+    {
+        $this->assertBoundedFile($path, $workspace, 'json', $maxOutputBytes);
+        $contents = \file_get_contents($path);
+        $hasRequiredMarkers = \is_string($contents);
+        if ($hasRequiredMarkers) {
+            foreach (self::JSON_REQUIRED_MARKERS as $marker) {
+                if (! \str_contains($contents, $marker)) {
+                    $hasRequiredMarkers = false;
+
+                    break;
+                }
+            }
+        }
+        $isValid = \is_string($contents) && \json_validate($contents) && $hasRequiredMarkers;
+        unset($contents);
+
+        if (! $isValid) {
+            throw new DwgOperationFailed('json_invalid', ['operation' => 'json']);
         }
     }
 

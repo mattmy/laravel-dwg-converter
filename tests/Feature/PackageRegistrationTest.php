@@ -25,6 +25,7 @@ it('registers its manager, defaults, and publishable configuration', function ()
 
     expect($manager)->toBeInstanceOf(DwgManager::class)
         ->and(config('dwg-converter.timeout'))->toBe(60)
+        ->and(config('dwg-converter.max_json_output_bytes'))->toBe(64 * 1024 * 1024)
         ->and($published)->toHaveCount(1)
         ->and(\basename($source))->toBe('dwg-converter.php')
         ->and(\basename($destination))->toBe('dwg-converter.php');

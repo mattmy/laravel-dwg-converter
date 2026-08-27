@@ -27,6 +27,7 @@ it('rejects a forged DWG candidate through every public operation', function (st
     $operationResult = match ($operation) {
         'dxf' => static fn () => Dwg::toDxf($source)->convert(),
         'image' => static fn () => Dwg::toImage($source)->convert(),
+        'json' => static fn () => Dwg::toJson($source)->convert(),
         'thumbnail' => static fn () => Dwg::thumbnail($source)->extract(),
         default => throw new RuntimeException('Unknown acceptance operation.'),
     };
@@ -37,5 +38,6 @@ it('rejects a forged DWG candidate through every public operation', function (st
 })->with([
     'DXF' => ['dxf'],
     'image' => ['image'],
+    'JSON' => ['json'],
     'thumbnail' => ['thumbnail'],
 ]);

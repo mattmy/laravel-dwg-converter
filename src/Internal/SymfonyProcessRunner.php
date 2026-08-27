@@ -46,6 +46,7 @@ final class SymfonyProcessRunner implements ProcessRunner
         $expectedTool ??= match ($operation) {
             'thumbnail' => 'dwgbmp',
             'dxf' => 'dwg2dxf',
+            'json' => 'dwgread',
             default => '',
         };
         if (! $process->isSuccessful() || ! \str_contains(\strtolower($reportedVersion), $expectedTool)) {
