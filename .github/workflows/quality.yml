@@ -80,7 +80,8 @@ jobs:
           --with=orchestra/testbench:^${{ matrix.testbench }}
           ${{ matrix.flags }}
       - run: php --version
-      - run: composer show illuminate/support orchestra/testbench
+      - run: composer show illuminate/support
+      - run: composer show orchestra/testbench
       - run: vendor/bin/pest --testsuite=Unit,Feature
 
   archive:
