@@ -1,62 +1,127 @@
 # Laravel DWG Converter
 
-`mattmy/laravel-dwg-converter` is a Laravel-first wrapper around user-installed LibreDWG CLI tools. It requires PHP 8.3+ and Laravel 12 or 13.
+[English](README.md) | [繁體中文](README.zh-TW.md)
+
+Laravel DWG Converter gives Laravel applications a small, typed API for extracting an embedded DWG
+thumbnail or exporting a DWG as DXF, structural JSON, PNG, JPEG, or WebP. Each operation uses only the
+external command-line tools it needs.
+
+> This package is currently unreleased. The installation command below applies once the package is
+> published on Packagist.
+
+## Features
+
+- Extract an embedded BMP, PNG, or WMF preview without pretending to render the drawing.
+- Export ASCII DXF with an optional target DXF version.
+- Export LibreDWG structural JSON for inspection or downstream processing.
+- Create whole-model-space PNG, JPEG, or WebP previews at three preset resolutions.
+- Accept an uploaded file, a local absolute path, or explicitly wrapped DWG bytes.
+- Return a one-time output that can be streamed directly to Laravel Storage.
+
+## Requirements
+
+| Requirement | Supported |
+|---|---|
+| PHP | 8.3 or later |
+| Laravel | 12 or 13 |
+| CI-tested combinations | PHP 8.3–8.5 with Laravel 12–13, including the PHP 8.3 / Laravel 12 lowest boundary |
+
+External commands are feature-specific. You do not need LibreOffice or ImageMagick when you only extract
+thumbnails, create DXF, or export JSON.
+
+## External commands by operation
+
+| Operation | Required commands |
+|---|---|
+| `Dwg::thumbnail(...)->extract()` | LibreDWG `dwgbmp` |
+| `Dwg::toDxf(...)->convert()` | LibreDWG `dwg2dxf` |
+| `Dwg::toJson(...)->convert()` | LibreDWG `dwgread` with JSON output support |
+| `Dwg::toImage(...)->convert()` | LibreDWG `dwg2dxf`, LibreOffice 7.4+ `soffice`, ImageMagick 7 `magick` |
+
+The package does not download or bundle these tools. For LibreDWG installation, see the
+[official LibreDWG repository](https://github.com/libredwg/libredwg). The
+[external tools guide](https://mattmy.github.io/laravel-dwg-converter-doc/guide/external-tools) covers
+LibreOffice and ImageMagick installation on Ubuntu/Debian, RHEL/Fedora, and Windows.
+
+## Installation
+
+Once the package is published, install it with Composer:
 
 ```bash
 composer require mattmy/laravel-dwg-converter
 ```
 
-Install LibreDWG separately, then publish the configuration when its executables are not on `PATH`:
+If a required command is not on `PATH`, publish the configuration and provide its absolute path:
 
 ```bash
 php artisan vendor:publish --tag=dwg-converter-config
 ```
 
-Configure `LIBREDWG_DWGBMP`, `LIBREDWG_DWG2DXF`, `LIBREDWG_DWGREAD`, `DWG_CONVERTER_LIBREOFFICE`, and `DWG_CONVERTER_IMAGEMAGICK` with executable paths. The package neither downloads nor contains LibreDWG; use a maintained LibreDWG patch release.
+## Quick start
 
-On Windows, point `DWG_CONVERTER_LIBREOFFICE` to LibreOffice's console launcher, normally `C:/Program Files/LibreOffice/program/soffice.com`; using `soffice.exe` can exit successfully without creating a headless conversion output.
-Also configure a short absolute `temporary_directory` path for image conversion. LibreOffice can crash when its isolated profile and intermediate files exceed Windows path limits.
+This example extracts the DWG's embedded preview and streams it to Laravel's default disk. The source is
+an `UploadedFile` from a validated request.
 
 ```php
-use Mattmy\DwgConverter\DwgBinary;
-use Mattmy\DwgConverter\DxfVersion;
 use Mattmy\DwgConverter\Facades\Dwg;
-use Mattmy\DwgConverter\ImageFormat;
-use Mattmy\DwgConverter\ImageResolution;
 
 $thumbnail = Dwg::thumbnail($request->file('drawing'))->extract();
 
-$dxf = Dwg::toDxf(DwgBinary::from($bytes))
-    ->toVersion(DxfVersion::R2018)
-    ->convert();
-
-$json = Dwg::toJson($request->file('drawing'))->convert();
-
-$image = Dwg::toImage(storage_path('app/private/drawing.dwg'))
-    ->format(ImageFormat::WEBP)
-    ->usingDxfVersion(DxfVersion::R2018)
-    ->atResolution(ImageResolution::MEDIUM)
-    ->convert();
+$path = $thumbnail->storeAs(
+    path: 'drawing-thumbnails',
+    name: 'floor-plan.'.$thumbnail->extension(),
+);
 ```
 
-Sources may be a valid `UploadedFile`, a local absolute path, or bytes explicitly wrapped with `DwgBinary::from()`. A plain string is always treated as a path.
-
-Source binding performs no I/O. `convert()` and `extract()` snapshot the source, reject obvious non-DWG candidates, then rely on the selected LibreDWG command and output validation. Success means the configured LibreDWG build completed this operation without a critical decode failure; it is not a safety certification, full DWG conformance check, or visual-fidelity guarantee. Run untrusted DWG conversions in a resource-limited worker or container with current external-tool security patches.
-
-`thumbnail()` extracts an embedded preview rather than rendering the drawing. A DWG may have no preview, and the result may be BMP, PNG, or WMF. `toImage()` runs LibreDWG, then tells LibreOffice and ImageMagick to use the selected PNG (default), JPEG, or WebP format while ImageMagick removes white margins. It creates a best-effort whole-model-space preview; it does not split drawings or promise AutoCAD visual fidelity. JPEG output is flattened onto white because JPEG has no alpha channel, and is re-encoded after trimming. SVG is intentionally unsupported because the evaluated LibreDWG renderer produced excessive whitespace.
-
-`toJson()` runs `dwgread` and returns LibreDWG's native structural JSON dump. It is an opaque artifact for inspection or downstream processing, not a stable application schema, GeoJSON, or a full-fidelity guarantee. It deliberately has no `usingDxfVersion()` because `dwgread` has no `--as` option and preserves the source DWG version. JSON can expand substantially beyond the DWG; its default `max_json_output_bytes` is 64 MiB, and JSON syntax is validated before return. Use `storeAs()` instead of `output()` for normal delivery.
-
-The default byte limits are 200 MiB input, 512 MiB output, and 64 MiB JSON. Each limit is disabled when its runtime config key is absent or its value is `null`, zero, or negative; only positive integers enforce a limit. For JSON, active `max_output_bytes` and `max_json_output_bytes` are combined by taking the smaller value. Do not disable limits for untrusted drawings unless the worker separately has adequate memory, CPU, and disk limits.
-
-`format()` accepts only `ImageFormat::PNG`, `ImageFormat::JPEG`, or `ImageFormat::WEBP`. `usingDxfVersion()` controls only the intermediate `dwg2dxf --as` target. `atResolution()` chooses the pre-trim LibreOffice export canvas: `HIGH` (default, 4096×5792), `MEDIUM` (2048×2896), or `LOW` (1024×1448). The trimmed image dimensions depend on drawing content.
-
-Each operation returns a one-time `DwgOutput`. `output()` loads the complete artifact into PHP memory; prefer Laravel Storage streaming for normal file delivery:
+A DWG may not contain an embedded thumbnail. Use image conversion when you need a rendered preview:
 
 ```php
-$path = $dxf->storeAs('drawings', 'floor-plan.dxf', 's3');
+use Mattmy\DwgConverter\ImageFormat;
+use Mattmy\DwgConverter\ImageResolution;
+
+$image = Dwg::toImage(storage_path('app/private/floor-plan.dwg'))
+    ->format(ImageFormat::WEBP)
+    ->atResolution(ImageResolution::MEDIUM)
+    ->convert();
+
+$path = $image->storeAs('drawing-previews', 'floor-plan.webp', 's3');
 ```
 
-Failures use exactly three package exceptions: `LibreDwgUnavailable`, `InvalidDwg`, and `DwgOperationFailed`. Each exposes `reason()` and sanitized scalar `context()`.
+## Inputs and outputs
 
-LibreDWG is GPLv3+ software installed and distributed independently; this package is MIT. LibreOffice and ImageMagick are also installed independently. `output()` loads the complete artifact into PHP memory; use `storeAs()` for normal file delivery. Windows binaries are exercised by the repository integration tests. Linux remains the release CI target once a pinned toolchain and redistributable DWG corpus are configured.
+Every operation accepts a valid `UploadedFile`, a local absolute path, or bytes explicitly wrapped with
+`DwgBinary::from($bytes)`. A plain string is always treated as a path.
+
+Each successful operation returns a one-time `DwgOutput`:
+
+- `extension()` and `mimeType()` inspect trusted output metadata without consuming it.
+- `storeAs()` streams the artifact to Laravel Storage and cleans up temporary resources.
+- `output()` returns all bytes as a string and should only be used for outputs that safely fit in PHP memory.
+
+## Errors and operational limits
+
+Failures use `LibreDwgUnavailable`, `InvalidDwg`, or `DwgOperationFailed`. Each exception provides a stable
+`reason()` and sanitized scalar `context()`.
+
+The default limits are 200 MiB input, 512 MiB general output, and 64 MiB JSON output. Set a byte limit to
+`null`, zero, or a negative integer to disable it. Keep positive limits and run untrusted DWG conversions in
+a resource-limited worker or container.
+
+Successful conversion means the configured tools completed the requested operation and the artifact passed
+the package's format checks. It is not a DWG safety certification, a full conformance check, or an AutoCAD
+visual-fidelity guarantee.
+
+## Documentation
+
+Read the complete English and Traditional Chinese documentation at
+[mattmy.github.io/laravel-dwg-converter-doc](https://mattmy.github.io/laravel-dwg-converter-doc/).
+
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for unreleased changes.
+
+## License
+
+Laravel DWG Converter is released under the [MIT License](LICENSE). LibreDWG is GPLv3+ software installed
+and distributed separately. LibreOffice and ImageMagick are also installed separately under their own
+licenses.
