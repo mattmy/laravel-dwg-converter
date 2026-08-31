@@ -3,17 +3,16 @@
 [English](README.md) | [繁體中文](README.zh-TW.md)
 
 Laravel DWG Converter gives Laravel applications a small, typed API for extracting an embedded DWG
-thumbnail or exporting a DWG as DXF, structural JSON, PNG, JPEG, or WebP. Each operation uses only the
-external command-line tools it needs.
+thumbnail or exporting a DWG as DXF, structural JSON, PNG, JPEG, or WebP.
 
 ## Features
 
-- Extract an embedded BMP, PNG, or WMF preview without pretending to render the drawing.
-- Export ASCII DXF with an optional target DXF version.
-- Export LibreDWG structural JSON for inspection or downstream processing.
-- Create whole-model-space PNG, JPEG, or WebP previews at three preset resolutions.
-- Accept an uploaded file, a local absolute path, or explicitly wrapped DWG bytes.
-- Return a one-time output that can be streamed directly to Laravel Storage.
+- Extract embedded DWG thumbnails.
+- Convert DWG files to ASCII DXF.
+- Export DWG files as structural JSON.
+- Create PNG, JPEG, or WebP previews.
+- Accept uploaded files, local paths, or DWG bytes.
+- Store or stream results with Laravel Storage.
 
 ## Requirements
 

@@ -3,16 +3,16 @@
 [English](README.md) | [繁體中文](README.zh-TW.md)
 
 Laravel DWG Converter 讓 Laravel 應用透過小型且具型別的 API，擷取 DWG 內嵌縮圖，或將 DWG
-輸出為 DXF、結構 JSON、PNG、JPEG 或 WebP。每個操作只使用自己需要的外部命令列工具。
+輸出為 DXF、結構 JSON、PNG、JPEG 或 WebP。
 
 ## 功能特色
 
-- 擷取 DWG 內嵌的 BMP、PNG 或 WMF 預覽，不把縮圖誤稱為圖面渲染。
-- 輸出 ASCII DXF，並可選擇目標 DXF 版本。
-- 輸出 LibreDWG 結構 JSON，供檢查或後續處理。
-- 以三種預設解析度建立整個 model space 的 PNG、JPEG 或 WebP 預覽。
-- 接受上傳檔案、local absolute path 或明確包裝的 DWG bytes。
-- 回傳一次性輸出，可直接串流至 Laravel Storage。
+- 擷取 DWG 內嵌縮圖。
+- 將 DWG 轉換為 ASCII DXF。
+- 將 DWG 輸出為結構 JSON。
+- 建立 PNG、JPEG 或 WebP 預覽。
+- 接受上傳檔案、local path 或 DWG bytes。
+- 透過 Laravel Storage 儲存或串流結果。
 
 ## 系統需求
 
