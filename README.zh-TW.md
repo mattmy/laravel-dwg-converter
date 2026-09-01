@@ -1,6 +1,6 @@
 # Laravel DWG Converter
 
-[English](README.md) | [繁體中文](README.zh-TW.md)
+[English](README.md)
 
 Laravel DWG Converter 讓 Laravel 應用透過小型且具型別的 API，擷取 DWG 內嵌縮圖，或將 DWG
 輸出為 DXF、結構 JSON、PNG、JPEG 或 WebP。
