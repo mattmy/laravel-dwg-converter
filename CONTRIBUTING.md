@@ -5,5 +5,6 @@ Run `composer validate --strict`, `vendor/bin/pint --test`, `composer analyse`, 
 This library does not commit `composer.lock`; CI resolves both lowest and current dependency sets because consumers do not use a library lock file.
 
 For a real integration run, set `DWG_CONVERTER_TEST_DWG`, `DWG_CONVERTER_TEST_IMAGE_DWG`,
-`LIBREDWG_DWGBMP`, `LIBREDWG_DWG2DXF`, `DWG_CONVERTER_LIBREOFFICE`, and
-`DWG_CONVERTER_IMAGEMAGICK`, then run `vendor/bin/pest --testsuite=Integration --fail-on-skipped`.
+`LIBREDWG_DWGBMP`, `LIBREDWG_DWG2DXF`, `LIBREDWG_DWGREAD`, `DWG_CONVERTER_LIBREOFFICE`,
+and `DWG_CONVERTER_IMAGEMAGICK`, then run
+`vendor/bin/pest --testsuite=Integration --fail-on-skipped`.
