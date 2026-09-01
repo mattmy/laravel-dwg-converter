@@ -8,6 +8,7 @@ use Illuminate\Http\UploadedFile;
 use Mattmy\DwgConverter\DwgBinary;
 use Mattmy\DwgConverter\Exceptions\DwgOperationFailed;
 use Mattmy\DwgConverter\Exceptions\InvalidDwg;
+use Mattmy\DwgConverter\Exceptions\LibreDwgUnavailable;
 
 /**
  * Owns one isolated temporary DWG snapshot and its generated artifacts.
@@ -28,6 +29,7 @@ final class Workspace
      *
      * @throws DwgOperationFailed
      * @throws InvalidDwg
+     * @throws LibreDwgUnavailable
      */
     public static function fromSource(
         UploadedFile|string|DwgBinary $source,
@@ -36,17 +38,17 @@ final class Workspace
         string $operation,
     ): self {
         if (! self::isAbsolutePath($temporaryDirectory)) {
-            throw new DwgOperationFailed('invalid_configuration', ['operation' => $operation]);
+            throw new LibreDwgUnavailable('invalid_configuration', ['operation' => $operation]);
         }
 
         if (! \is_dir($temporaryDirectory) && ! \mkdir($temporaryDirectory, 0700, true) && ! \is_dir($temporaryDirectory)) {
-            throw new DwgOperationFailed('invalid_configuration', ['operation' => $operation]);
+            throw new LibreDwgUnavailable('invalid_configuration', ['operation' => $operation]);
         }
 
         try {
             $directory = $temporaryDirectory . DIRECTORY_SEPARATOR . \bin2hex(\random_bytes(16));
         } catch (\Throwable $exception) {
-            throw new DwgOperationFailed('invalid_configuration', ['operation' => $operation], $exception);
+            throw new LibreDwgUnavailable('invalid_configuration', ['operation' => $operation], $exception);
         }
 
         if (! \mkdir($directory, 0700)) {
@@ -299,8 +301,10 @@ final class Workspace
     /**
      * Determine whether a path is rooted on Windows or Unix.
      */
-    private static function isAbsolutePath(string $path): bool
+    public static function isAbsolutePath(string $path): bool
     {
-        return \preg_match('/^(?:[A-Za-z]:[\\\\\/]|\/)/', $path) === 1;
+        return DIRECTORY_SEPARATOR === '\\'
+            ? \preg_match('/^[A-Za-z]:[\\\\\/]/', $path) === 1
+            : \str_starts_with($path, '/');
     }
 }

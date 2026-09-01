@@ -25,9 +25,6 @@ final class Converter
 
     private const int MAX_IMAGE_DIMENSION = 32_768;
 
-    /** @var list<string> */
-    private const array JSON_REQUIRED_MARKERS = ['"FILEHEADER"', '"HEADER"', '"OBJECTS"'];
-
     /**
      * @param  array<string, mixed>  $configuration
      */
@@ -310,7 +307,7 @@ final class Converter
             && \is_finite((float) $timeout)
             && $timeout > 0;
         $validDirectory = \is_string($temporaryDirectory)
-            && \preg_match('/^(?:[A-Za-z]:[\\\\\/]|\/)/', $temporaryDirectory) === 1;
+            && Workspace::isAbsolutePath($temporaryDirectory);
 
         if (
             ! \is_string($executable)
@@ -498,7 +495,7 @@ final class Converter
     }
 
     /**
-     * Validate a bounded LibreDWG JSON artifact without decoding its full structure.
+     * Validate a bounded LibreDWG JSON artifact without decoding or changing its structure.
      *
      * @throws DwgOperationFailed
      */
@@ -506,17 +503,7 @@ final class Converter
     {
         $this->assertBoundedFile($path, $workspace, 'json', $maxOutputBytes);
         $contents = \file_get_contents($path);
-        $hasRequiredMarkers = \is_string($contents);
-        if ($hasRequiredMarkers) {
-            foreach (self::JSON_REQUIRED_MARKERS as $marker) {
-                if (! \str_contains($contents, $marker)) {
-                    $hasRequiredMarkers = false;
-
-                    break;
-                }
-            }
-        }
-        $isValid = \is_string($contents) && \json_validate($contents) && $hasRequiredMarkers;
+        $isValid = \is_string($contents) && \json_validate($contents);
         unset($contents);
 
         if (! $isValid) {

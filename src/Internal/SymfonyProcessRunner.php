@@ -16,10 +16,21 @@ use Symfony\Component\Process\Process;
  */
 final class SymfonyProcessRunner implements ProcessRunner
 {
+    private const float CAPABILITY_PROBE_TIMEOUT = 10.0;
+
     private const int STDERR_LIMIT = 4096;
 
+    /** @var array<string, list<string>> */
+    private const array REQUIRED_CAPABILITIES = [
+        'dwgbmp' => ['dwgfile'],
+        'dwg2dxf' => ['--as', '-o'],
+        'dwgread' => ['--format', 'json', '-o'],
+        'libreoffice' => ['--headless', '--convert-to', '--outdir'],
+        'imagemagick' => ['-fuzz', '-trim', '-alpha'],
+    ];
+
     /**
-     * Verify that an executable starts and identifies itself as LibreDWG.
+     * Verify that an executable starts, identifies itself, and exposes the required CLI shape.
      *
      * @throws LibreDwgUnavailable
      */
@@ -34,10 +45,10 @@ final class SymfonyProcessRunner implements ProcessRunner
             throw new LibreDwgUnavailable('executable_not_found', $this->context($operation, $stage));
         }
 
+        $probeStartedAt = \microtime(true);
+
         try {
-            $process = new Process([$executable, '--version']);
-            $process->setTimeout(10.0);
-            $process->run();
+            $process = $this->probe($executable, '--version', self::CAPABILITY_PROBE_TIMEOUT);
         } catch (\Throwable $exception) {
             throw new LibreDwgUnavailable('executable_not_found', $this->context($operation, $stage), $exception);
         }
@@ -49,7 +60,35 @@ final class SymfonyProcessRunner implements ProcessRunner
             'json' => 'dwgread',
             default => '',
         };
-        if (! $process->isSuccessful() || ! \str_contains(\strtolower($reportedVersion), $expectedTool)) {
+        if (
+            $expectedTool === ''
+            || ! $process->isSuccessful()
+            || ! \str_contains(\strtolower($reportedVersion), $expectedTool)
+            || ! $this->supportsRequiredVersion($expectedTool, $reportedVersion)
+        ) {
+            throw new LibreDwgUnavailable('unsupported_tool_capability', [
+                ...$this->context($operation, $stage),
+                'reported_version' => $this->summary($reportedVersion),
+            ]);
+        }
+
+        $remainingTimeout = self::CAPABILITY_PROBE_TIMEOUT - (\microtime(true) - $probeStartedAt);
+
+        try {
+            if ($remainingTimeout <= 0) {
+                throw new \RuntimeException('Capability probe timeout exhausted.');
+            }
+
+            $helpProcess = $this->probe($executable, '--help', $remainingTimeout);
+        } catch (\Throwable $exception) {
+            throw new LibreDwgUnavailable('unsupported_tool_capability', [
+                ...$this->context($operation, $stage),
+                'reported_version' => $this->summary($reportedVersion),
+            ], $exception);
+        }
+
+        $help = \strtolower($helpProcess->getOutput() . $helpProcess->getErrorOutput());
+        if (! $helpProcess->isSuccessful() || ! $this->hasRequiredCapabilities($expectedTool, $help)) {
             throw new LibreDwgUnavailable('unsupported_tool_capability', [
                 ...$this->context($operation, $stage),
                 'reported_version' => $this->summary($reportedVersion),
@@ -164,6 +203,50 @@ final class SymfonyProcessRunner implements ProcessRunner
         $value = \preg_replace('/(?:[A-Za-z]:)?[\\\\\/][^\s]*/', '[path]', $value) ?? '';
 
         return \substr(\trim($value), 0, self::STDERR_LIMIT);
+    }
+
+    /**
+     * Execute one bounded executable probe.
+     */
+    private function probe(string $executable, string $argument, float $timeout): Process
+    {
+        $process = new Process([$executable, $argument]);
+        $process->setTimeout($timeout);
+        $process->run();
+
+        return $process;
+    }
+
+    /**
+     * Confirm that the tool's help output lists every option used by the package.
+     */
+    private function hasRequiredCapabilities(string $tool, string $help): bool
+    {
+        foreach (self::REQUIRED_CAPABILITIES[$tool] ?? [] as $capability) {
+            if (! \str_contains($help, $capability)) {
+                return false;
+            }
+        }
+
+        return isset(self::REQUIRED_CAPABILITIES[$tool]);
+    }
+
+    /**
+     * Enforce version floors for capabilities that cannot be proven from help output alone.
+     */
+    private function supportsRequiredVersion(string $tool, string $reportedVersion): bool
+    {
+        if ($tool === 'libreoffice') {
+            return \preg_match('/libreoffice\s+(\d+\.\d+)/i', $reportedVersion, $matches) === 1
+                && \version_compare($matches[1], '7.4', '>=');
+        }
+
+        if ($tool === 'imagemagick') {
+            return \preg_match('/imagemagick\s+(\d+)/i', $reportedVersion, $matches) === 1
+                && (int) $matches[1] >= 7;
+        }
+
+        return true;
     }
 
     /**

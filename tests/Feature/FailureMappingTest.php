@@ -25,6 +25,10 @@ it('maps invalid published configuration to an environment failure', function (
     'input limit type' => ['max_input_bytes', 'large'],
     'output limit type' => ['max_output_bytes', 1.5],
     'temporary root' => ['temporary_directory', 'relative/path'],
+    'foreign absolute temporary root' => [
+        'temporary_directory',
+        DIRECTORY_SEPARATOR === '\\' ? '/tmp/dwg-converter' : 'C:\\temp\\dwg-converter',
+    ],
     'executables shape' => ['executables', 'dwgbmp'],
 ]);
 

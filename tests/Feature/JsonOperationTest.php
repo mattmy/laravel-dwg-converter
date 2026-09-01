@@ -9,7 +9,7 @@ use Mattmy\DwgConverter\Facades\Dwg;
 use Mattmy\DwgConverter\Internal\ProcessRunner;
 use Mattmy\DwgConverter\Tests\Fakes\FakeProcessRunner;
 
-it('writes a structural JSON artifact through the public interface', function (): void {
+it('writes a JSON artifact through the public interface', function (): void {
     $contents = '{"created_by":"LibreDWG 0.14","FILEHEADER":{},"HEADER":{},"OBJECTS":{}}';
     $runner = FakeProcessRunner::writesFile('drawing.json', $contents);
     app()->instance(ProcessRunner::class, $runner);
@@ -37,6 +37,19 @@ it('rejects an invalid JSON artifact', function (): void {
     expect(fn () => Dwg::toJson(DwgBinary::from('AC1032 drawing'))->convert())
         ->toThrow(DwgOperationFailed::class, 'json_invalid');
 });
+
+it('preserves any valid JSON structure returned by dwgread', function (string $contents): void {
+    $runner = FakeProcessRunner::writesFile('drawing.json', $contents);
+    app()->instance(ProcessRunner::class, $runner);
+
+    $output = Dwg::toJson(DwgBinary::from('AC1032 drawing'))->convert();
+
+    expect($output->output())->toBe($contents);
+})->with([
+    'nested object' => ['{"payload":{"FILEHEADER":{},"HEADER":{},"OBJECTS":{}}}'],
+    'different key order' => ['{"HEADER":{},"FILEHEADER":{},"OBJECTS":{}}'],
+    'array root' => ['[{"type":"LINE"}]'],
+]);
 
 it('rejects JSON output above its dedicated validation limit', function (): void {
     config()->set('dwg-converter.max_json_output_bytes', 64);
