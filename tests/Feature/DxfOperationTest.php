@@ -44,7 +44,7 @@ it('accepts a bounded ASCII DXF whose EOF follows a large entities section', fun
     $output = Dwg::toDxf(DwgBinary::from('AC1032 drawing'))->convert();
 
     expect($output->extension())->toBe('dxf')
-        ->and($output->mimeType())->toBe('application/dxf')
+        ->and($output->mimeType())->toBe('image/vnd.dxf')
         ->and($output->output())->toBe($contents);
 });
 

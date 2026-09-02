@@ -103,7 +103,7 @@ final class Converter
             $this->assertBoundedFile($output, $workspace, $operation, $configuration['max_output_bytes']);
             $this->assertDxf($output);
 
-            return new DwgOutput($workspace, $output, 'dxf', 'application/dxf', $configuration['max_output_bytes'], $operation);
+            return new DwgOutput($workspace, $output, 'dxf', 'image/vnd.dxf', $configuration['max_output_bytes'], $operation);
         } catch (\Throwable $exception) {
             $workspace->cleanup();
 

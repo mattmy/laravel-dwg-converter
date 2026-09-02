@@ -24,6 +24,7 @@
     "archive": {
         "exclude": [
             "/.github",
+            "/.phpunit.cache",
             "/tests",
             "/vendor",
             "/composer.lock",

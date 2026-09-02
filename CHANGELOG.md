@@ -6,6 +6,10 @@ All notable changes to this project will be documented in this file. Laravel DWG
 
 ## [Unreleased]
 
+### Fixed
+
+- Report converted DXF artifacts as `image/vnd.dxf`, so MIME-based consumers resolve the trusted `.dxf` extension.
+
 ## [0.1.0] - 2026-09-01
 
 ### Added
