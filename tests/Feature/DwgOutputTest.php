@@ -111,7 +111,7 @@ it('refuses to consume an artifact outside its workspace', function (): void {
         1024,
         'dxf',
     );
-    $output = new DwgOutput($workspace, $outside, 'dxf', 'application/dxf', 1024, 'dxf');
+    $output = new DwgOutput($workspace, $outside, 'dxf', 'image/vnd.dxf', 1024, 'dxf');
 
     try {
         expect(fn () => $output->output())
