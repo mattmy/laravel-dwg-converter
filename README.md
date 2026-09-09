@@ -65,7 +65,6 @@ $thumbnail = Dwg::thumbnail($request->file('drawing'))->extract();
 
 $path = $thumbnail->storeAs(
     path: 'drawing-thumbnails',
-    name: 'floor-plan.'.$thumbnail->extension(),
 );
 ```
 
@@ -93,6 +92,11 @@ Each successful operation returns a one-time `DwgOutput`:
 - `extension()` and `mimeType()` inspect trusted output metadata without consuming it.
 - `storeAs()` streams the artifact to Laravel Storage and cleans up temporary resources.
 - `output()` returns all bytes as a string and should only be used for outputs that safely fit in PHP memory.
+
+`storeAs()` accepts an optional safe basename. It preserves an explicit name and appends the trusted output
+extension when needed: `test1.webp` stays `test1.webp`, `test1.png` becomes `test1.png.webp`, and
+`test1.WEBP` becomes `test1.webp`. When omitted, it uses the local path or uploaded filename stem; `DwgBinary`
+uses a random `converted-{16 lowercase hex}` stem.
 
 ## Errors and operational limits
 
