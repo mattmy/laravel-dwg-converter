@@ -12,6 +12,10 @@ All notable changes to this project will be documented in this file. Laravel DWG
 
 - Report converted DXF artifacts as `image/vnd.dxf`, so MIME-based consumers resolve the trusted `.dxf` extension.
 
+### Changed
+
+- Allow `DwgOutput::storeAs()` to derive a safe filename when omitted and normalize or append the trusted output extension.
+
 ## [0.1.0] - 2026-09-01
 
 ### Added

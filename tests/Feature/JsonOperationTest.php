@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 use Mattmy\DwgConverter\DwgBinary;
 use Mattmy\DwgConverter\Exceptions\DwgOperationFailed;
 use Mattmy\DwgConverter\Exceptions\LibreDwgUnavailable;
@@ -83,4 +85,27 @@ it('uses the general output limit when it is lower than the JSON limit', functio
 
     expect(fn () => Dwg::toJson(DwgBinary::from('AC1032 drawing'))->convert())
         ->toThrow(DwgOperationFailed::class, 'output_too_large');
+});
+
+it('uses an uploaded source stem when no storage name is provided', function (): void {
+    $source = \tempnam(\sys_get_temp_dir(), 'dwg-upload-');
+    if ($source === false || \file_put_contents($source, 'AC1032 drawing') === false) {
+        throw new RuntimeException('Unable to create the upload fixture.');
+    }
+
+    try {
+        Storage::fake('exports');
+        $runner = FakeProcessRunner::writesFile('drawing.json', '{"FILEHEADER":{}}');
+        app()->instance(ProcessRunner::class, $runner);
+        $upload = new UploadedFile($source, 'floor-plan.dwg', 'application/octet-stream', null, true);
+
+        $stored = Dwg::toJson($upload)->convert()->storeAs('', disk: 'exports');
+
+        expect($stored)->toBe('floor-plan.json')
+            ->and(Storage::disk('exports')->exists($stored))->toBeTrue();
+    } finally {
+        if (\is_file($source)) {
+            \unlink($source);
+        }
+    }
 });

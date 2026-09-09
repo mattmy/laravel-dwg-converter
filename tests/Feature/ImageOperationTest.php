@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use Illuminate\Support\Facades\Storage;
 use Mattmy\DwgConverter\DwgBinary;
 use Mattmy\DwgConverter\DxfVersion;
 use Mattmy\DwgConverter\Exceptions\DwgOperationFailed;
@@ -149,6 +150,24 @@ it('uses each supported image format throughout the raster pipeline', function (
     'webp' => [ImageFormat::WEBP, 'webp', 'image/webp', 'webp:draw_webp_Export:{"PixelHeight":{"type":"long","value":"5792"},"PixelWidth":{"type":"long","value":"4096"}}'],
 ]);
 
+it('appends the trusted extension for every image format when storing', function (ImageFormat $format, string $extension): void {
+    Storage::fake('exports');
+    $runner = successfulImageRunner();
+    app()->instance(ProcessRunner::class, $runner);
+
+    $stored = Dwg::toImage(DwgBinary::from('AC1032 drawing'))
+        ->format($format)
+        ->convert()
+        ->storeAs('', 'preview.txt', 'exports');
+
+    expect($stored)->toBe('preview.txt.' . $extension)
+        ->and(Storage::disk('exports')->exists($stored))->toBeTrue();
+})->with([
+    'PNG' => [ImageFormat::PNG, 'png'],
+    'JPEG' => [ImageFormat::JPEG, 'jpg'],
+    'WebP' => [ImageFormat::WEBP, 'webp'],
+]);
+
 it('passes each approved DXF version to the image intermediate conversion', function (DxfVersion $version): void {
     $runner = successfulImageRunner();
     app()->instance(ProcessRunner::class, $runner);
@@ -236,3 +255,17 @@ it('rejects malformed final images', function (ImageFormat $format): void {
     expect(fn () => Dwg::toImage(DwgBinary::from('AC1032 drawing'))->format($format)->convert())
         ->toThrow(DwgOperationFailed::class, 'image_invalid');
 })->with(\array_map(static fn (ImageFormat $format): array => [$format], ImageFormat::cases()));
+
+it('uses a random stem for binary sources when no storage name is provided', function (): void {
+    Storage::fake('exports');
+    $runner = successfulImageRunner();
+    app()->instance(ProcessRunner::class, $runner);
+
+    $stored = Dwg::toImage(DwgBinary::from('AC1032 drawing'))
+        ->format(ImageFormat::WEBP)
+        ->convert()
+        ->storeAs('', disk: 'exports');
+
+    expect($stored)->toMatch('/^converted-[a-f0-9]{16}\\.webp$/')
+        ->and(Storage::disk('exports')->exists($stored))->toBeTrue();
+});

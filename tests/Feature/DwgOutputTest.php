@@ -32,10 +32,35 @@ it('streams an output to a named Laravel disk', function (): void {
 
     $path = $output->storeAs('converted', 'floor-plan.DXF', 'drawings');
 
-    expect($path)->toBe('converted/floor-plan.DXF')
+    expect($path)->toBe('converted/floor-plan.dxf')
         ->and(Storage::disk('drawings')->get($path))->toBe($contents)
         ->and(fn () => $output->output())->toThrow(LogicException::class);
 });
+
+it('appends or normalizes the trusted output extension for an explicit storage name', function (string $name, string $expected): void {
+    Storage::fake('exports');
+    $workspace = Workspace::fromSource(
+        DwgBinary::from('AC1032 drawing'),
+        config()->string('dwg-converter.temporary_directory'),
+        1024,
+        'image',
+    );
+    $artifact = $workspace->outputPath('output.webp');
+    if (\file_put_contents($artifact, 'artifact') === false) {
+        throw new RuntimeException('Unable to create the output fixture.');
+    }
+
+    $output = new DwgOutput($workspace, $artifact, 'webp', 'image/webp', 1024, 'image');
+
+    $path = $output->storeAs('', $name, 'exports');
+
+    expect($path)->toBe($expected)
+        ->and(Storage::disk('exports')->get($path))->toBe('artifact');
+})->with([
+    'matching lowercase extension' => ['test1.webp', 'test1.webp'],
+    'different extension is preserved' => ['test1.png', 'test1.png.webp'],
+    'matching uppercase extension is canonicalized' => ['test1.WEBP', 'test1.webp'],
+]);
 
 it('uses the default Laravel disk when no disk is named', function (): void {
     Storage::fake('local');
@@ -80,8 +105,16 @@ it('consumes and cleans the result when a storage destination is invalid', funct
 })->with([
     'parent traversal' => ['../outside', 'drawing.dxf'],
     'absolute directory' => ['/outside', 'drawing.dxf'],
+    'empty directory segment' => ['safe//outside', 'drawing.dxf'],
+    'current directory segment' => ['safe/./outside', 'drawing.dxf'],
+    'control character directory' => ["safe\u{0085}outside", 'drawing.dxf'],
     'nested filename' => ['drawings', 'nested/drawing.dxf'],
-    'wrong extension' => ['drawings', 'drawing.svg'],
+    'empty filename' => ['drawings', ''],
+    'current directory filename' => ['drawings', '.'],
+    'parent directory filename' => ['drawings', '..'],
+    'null byte filename' => ['drawings', "drawing\0.dxf"],
+    'control character filename' => ['drawings', "drawing\n.dxf"],
+    'C1 control character filename' => ['drawings', "drawing\u{0085}.dxf"],
 ]);
 
 it('consumes and cleans the result when Laravel Storage throws', function (): void {

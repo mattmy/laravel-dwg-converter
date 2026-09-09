@@ -43,6 +43,7 @@ final class Converter
     public function thumbnail(UploadedFile|string|DwgBinary $source): DwgOutput
     {
         $operation = 'thumbnail';
+        $sourceStem = $this->sourceStem($source);
         $configuration = $this->configuration('dwgbmp', $operation);
         $workspace = $this->workspace($source, $operation, $configuration);
 
@@ -60,7 +61,7 @@ final class Converter
             $thumbnail = $this->findThumbnail($workspace);
             [$extension, $mimeType] = $this->thumbnailType($thumbnail, $workspace, $configuration['max_output_bytes']);
 
-            return new DwgOutput($workspace, $thumbnail, $extension, $mimeType, $configuration['max_output_bytes'], $operation);
+            return new DwgOutput($workspace, $thumbnail, $extension, $mimeType, $configuration['max_output_bytes'], $operation, $sourceStem);
         } catch (\Throwable $exception) {
             $workspace->cleanup();
 
@@ -78,6 +79,7 @@ final class Converter
     public function dxf(UploadedFile|string|DwgBinary $source, ?DxfVersion $version): DwgOutput
     {
         $operation = 'dxf';
+        $sourceStem = $this->sourceStem($source);
         $configuration = $this->configuration('dwg2dxf', $operation);
         $workspace = $this->workspace($source, $operation, $configuration);
         $output = $workspace->outputPath('output.dxf');
@@ -103,7 +105,7 @@ final class Converter
             $this->assertBoundedFile($output, $workspace, $operation, $configuration['max_output_bytes']);
             $this->assertDxf($output);
 
-            return new DwgOutput($workspace, $output, 'dxf', 'image/vnd.dxf', $configuration['max_output_bytes'], $operation);
+            return new DwgOutput($workspace, $output, 'dxf', 'image/vnd.dxf', $configuration['max_output_bytes'], $operation, $sourceStem);
         } catch (\Throwable $exception) {
             $workspace->cleanup();
 
@@ -121,6 +123,7 @@ final class Converter
     public function json(UploadedFile|string|DwgBinary $source): DwgOutput
     {
         $operation = 'json';
+        $sourceStem = $this->sourceStem($source);
         $configuration = $this->jsonConfiguration($operation);
         $workspace = $this->workspace($source, $operation, $configuration);
         $output = $workspace->outputPath('drawing.json');
@@ -146,6 +149,7 @@ final class Converter
                 'application/json',
                 $configuration['effective_output_limit'],
                 $operation,
+                $sourceStem,
             );
         } catch (\Throwable $exception) {
             $workspace->cleanup();
@@ -168,6 +172,7 @@ final class Converter
         ImageResolution $resolution,
     ): DwgOutput {
         $operation = 'image';
+        $sourceStem = $this->sourceStem($source);
         $dxfConfiguration = $this->configuration('dwg2dxf', $operation);
         $libreOfficeConfiguration = $this->configuration('libreoffice', $operation);
         $imageMagickConfiguration = $this->configuration('imagemagick', $operation);
@@ -259,6 +264,7 @@ final class Converter
                 $format->mimeType(),
                 $imageMagickConfiguration['max_output_bytes'],
                 $operation,
+                $sourceStem,
             );
         } catch (\Throwable $exception) {
             $workspace->cleanup();
@@ -286,6 +292,20 @@ final class Converter
             $configuration['max_input_bytes'],
             $operation,
         );
+    }
+
+    /**
+     * Derive a non-authoritative storage stem without reading the source.
+     */
+    private function sourceStem(UploadedFile|string|DwgBinary $source): ?string
+    {
+        if ($source instanceof DwgBinary) {
+            return null;
+        }
+
+        $name = $source instanceof UploadedFile ? $source->getClientOriginalName() : \basename($source);
+
+        return \pathinfo($name, PATHINFO_FILENAME);
     }
 
     /**

@@ -34,6 +34,7 @@ final class DwgOutput
         private readonly string $mimeType,
         private readonly ?int $maxOutputBytes,
         private readonly string $operation,
+        private readonly ?string $sourceStem = null,
     ) {}
 
     /**
@@ -89,14 +90,14 @@ final class DwgOutput
      * @throws DwgOperationFailed
      * @throws LogicException
      */
-    public function storeAs(string $path, string $name, ?string $disk = null): string
+    public function storeAs(string $path, ?string $name = null, ?string $disk = null): string
     {
         $this->beginConsumption();
 
         try {
-            $this->validateStorageDestination($path, $name);
+            [$directory, $name] = $this->validateStorageDestination($path, $name);
             $this->assertOutputFile();
-            $stored = Storage::disk($disk)->putFileAs($path, new File($this->path), $name);
+            $stored = Storage::disk($disk)->putFileAs($directory, new File($this->path), $name);
             if ($stored === false) {
                 throw new DwgOperationFailed('storage_failed', ['operation' => $this->operation]);
             }
@@ -147,29 +148,90 @@ final class DwgOutput
     }
 
     /**
-     * Reject unsafe disk paths and an extension that disagrees with the artifact.
+     * Validate a disk-relative directory and resolve its trusted output filename.
+     *
+     * @return array{string, string}
      *
      * @throws DwgOperationFailed
      */
-    private function validateStorageDestination(string $path, string $name): void
+    private function validateStorageDestination(string $path, ?string $name): array
     {
-        $hasUnsafePath = \str_contains($path, "\0")
-            || \str_starts_with($path, '/')
-            || \str_starts_with($path, '\\')
+        if (\str_contains($path, "\0")
             || \str_contains($path, '\\')
-            || \preg_match('/^[A-Za-z]:/', $path) === 1
-            || \in_array('..', \explode('/', $path), true);
-        $hasUnsafeName = $name === ''
-            || \str_contains($name, "\0")
-            || \str_contains($name, '/')
-            || \str_contains($name, '\\');
-        if ($hasUnsafePath || $hasUnsafeName) {
+            || $this->hasControlCharacter($path)
+            || \str_starts_with($path, '/')
+            || \preg_match('/^[A-Za-z]:/', $path) === 1) {
             throw new DwgOperationFailed('storage_failed', ['operation' => $this->operation]);
         }
 
-        if (\strtolower(\pathinfo($name, PATHINFO_EXTENSION)) !== $this->extension) {
+        $directory = \rtrim($path, '/');
+        if ($directory !== '') {
+            foreach (\explode('/', $directory) as $segment) {
+                if (\in_array($segment, ['', '.', '..'], true)) {
+                    throw new DwgOperationFailed('storage_failed', ['operation' => $this->operation]);
+                }
+            }
+        }
+
+        if ($name !== null) {
+            $name = $this->validatedFilename($name);
+        } else {
+            try {
+                $name = $this->sourceStem === null ? null : $this->validatedFilename($this->sourceStem);
+            } catch (DwgOperationFailed) {
+                $name = null;
+            }
+
+            if ($name === null) {
+                try {
+                    $name = 'converted-' . \bin2hex(\random_bytes(8));
+                } catch (Throwable $exception) {
+                    throw new DwgOperationFailed('storage_failed', ['operation' => $this->operation], $exception);
+                }
+            }
+        }
+
+        return [$directory, $this->filenameWithExtension($name)];
+    }
+
+    /**
+     * Return a safe non-empty user-provided filename.
+     *
+     * @throws DwgOperationFailed
+     */
+    private function validatedFilename(string $filename): string
+    {
+        if (\in_array($filename, ['', '.', '..'], true)
+            || \str_contains($filename, '/')
+            || \str_contains($filename, '\\')
+            || $this->hasControlCharacter($filename)) {
             throw new DwgOperationFailed('storage_failed', ['operation' => $this->operation]);
         }
+
+        return $filename;
+    }
+
+    /**
+     * Reject C0, C1, and Unicode control characters, including invalid UTF-8.
+     */
+    private function hasControlCharacter(string $value): bool
+    {
+        return \preg_match('/[\p{Cc}]/u', $value) !== 0;
+    }
+
+    /**
+     * Append the trusted output extension without discarding user filename text.
+     *
+     * @return non-empty-string
+     */
+    private function filenameWithExtension(string $filename): string
+    {
+        $suffix = '.' . $this->extension;
+        if (\str_ends_with(\strtolower($filename), $suffix)) {
+            return \substr($filename, 0, -\strlen($suffix)) . $suffix;
+        }
+
+        return $filename . $suffix;
     }
 
     /**

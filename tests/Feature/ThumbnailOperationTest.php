@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use Illuminate\Support\Facades\Storage;
 use Mattmy\DwgConverter\DwgBinary;
 use Mattmy\DwgConverter\Exceptions\DwgOperationFailed;
 use Mattmy\DwgConverter\Facades\Dwg;
@@ -38,6 +39,21 @@ it('reports the thumbnail format from trusted bytes', function (
         'wmf',
         'image/wmf',
     ],
+]);
+
+it('uses each detected thumbnail extension when storing an explicit filename', function (string $contents, string $extension): void {
+    Storage::fake('exports');
+    $runner = FakeProcessRunner::writesFile('misleading.bin', $contents);
+    app()->instance(ProcessRunner::class, $runner);
+
+    $stored = Dwg::thumbnail(DwgBinary::from('AC1032 drawing'))->extract()->storeAs('', 'preview.jpg', 'exports');
+
+    expect($stored)->toBe('preview.jpg.' . $extension)
+        ->and(Storage::disk('exports')->exists($stored))->toBeTrue();
+})->with([
+    'PNG' => ["\x89PNG\r\n\x1a\n" . \str_repeat("\0", 12) . "IEND\xaeB`\x82", 'png'],
+    'BMP' => ['BM' . \str_repeat("\0", 52), 'bmp'],
+    'placeable WMF' => ["\xd7\xcd\xc6\x9a" . \str_repeat("\0", 36), 'wmf'],
 ]);
 
 it('rejects truncated thumbnail signatures', function (string $contents): void {
@@ -78,4 +94,38 @@ it('rejects a thumbnail larger than the configured output limit', function (): v
 
     expect(fn () => Dwg::thumbnail(DwgBinary::from('AC1032 drawing'))->extract())
         ->toThrow(DwgOperationFailed::class, 'output_too_large');
+});
+
+it('uses the source stem with the detected thumbnail extension when no storage name is provided', function (): void {
+    $temporary = \tempnam(\sys_get_temp_dir(), 'dwg-thumbnail-');
+    if ($temporary === false) {
+        throw new RuntimeException('Unable to create the source fixture.');
+    }
+
+    $source = $temporary . '.dwg';
+    if (! \rename($temporary, $source)) {
+        throw new RuntimeException('Unable to name the source fixture.');
+    }
+
+    if (\file_put_contents($source, 'AC1032 drawing') === false) {
+        throw new RuntimeException('Unable to write the source fixture.');
+    }
+
+    try {
+        Storage::fake('exports');
+        $runner = FakeProcessRunner::writesFile(
+            'input.png',
+            "\x89PNG\r\n\x1a\n" . \str_repeat("\0", 12) . "IEND\xaeB`\x82",
+        );
+        app()->instance(ProcessRunner::class, $runner);
+
+        $stored = Dwg::thumbnail($source)->extract()->storeAs('', disk: 'exports');
+
+        expect($stored)->toBe(\pathinfo($source, PATHINFO_FILENAME) . '.png')
+            ->and(Storage::disk('exports')->exists($stored))->toBeTrue();
+    } finally {
+        if (\is_file($source)) {
+            \unlink($source);
+        }
+    }
 });

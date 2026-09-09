@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use Illuminate\Support\Facades\Storage;
 use Mattmy\DwgConverter\DwgBinary;
 use Mattmy\DwgConverter\DxfVersion;
 use Mattmy\DwgConverter\Exceptions\DwgOperationFailed;
@@ -54,4 +55,35 @@ it('rejects a malformed DXF artifact', function (): void {
 
     expect(fn () => Dwg::toDxf(DwgBinary::from('AC1032 drawing'))->convert())
         ->toThrow(DwgOperationFailed::class, 'dxf_invalid');
+});
+
+it('uses an absolute source path stem when no storage name is provided', function (): void {
+    $temporary = \tempnam(\sys_get_temp_dir(), 'dwg-source-');
+    if ($temporary === false) {
+        throw new RuntimeException('Unable to create the source fixture.');
+    }
+
+    $source = $temporary . '.dwg';
+    if (! \rename($temporary, $source)) {
+        throw new RuntimeException('Unable to name the source fixture.');
+    }
+
+    if (\file_put_contents($source, 'AC1032 drawing') === false) {
+        throw new RuntimeException('Unable to write the source fixture.');
+    }
+
+    try {
+        Storage::fake('exports');
+        $runner = FakeProcessRunner::writesFile('output.dxf', "0\nSECTION\n2\nENTITIES\n0\nENDSEC\n0\nEOF\n");
+        app()->instance(ProcessRunner::class, $runner);
+
+        $stored = Dwg::toDxf($source)->convert()->storeAs('', disk: 'exports');
+
+        expect($stored)->toBe(\pathinfo($source, PATHINFO_FILENAME) . '.dxf')
+            ->and(Storage::disk('exports')->exists($stored))->toBeTrue();
+    } finally {
+        if (\is_file($source)) {
+            \unlink($source);
+        }
+    }
 });
