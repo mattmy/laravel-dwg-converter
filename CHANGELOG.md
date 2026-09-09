@@ -6,15 +6,17 @@ All notable changes to this project will be documented in this file. Laravel DWG
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-09-09
+
+### Changed
+
+- Allow `DwgOutput::storeAs()` to derive a safe filename when omitted and normalize or append the trusted output extension.
+
 ## [0.1.1] - 2026-09-02
 
 ### Fixed
 
 - Report converted DXF artifacts as `image/vnd.dxf`, so MIME-based consumers resolve the trusted `.dxf` extension.
-
-### Changed
-
-- Allow `DwgOutput::storeAs()` to derive a safe filename when omitted and normalize or append the trusted output extension.
 
 ## [0.1.0] - 2026-09-01
 
@@ -28,6 +30,7 @@ All notable changes to this project will be documented in this file. Laravel DWG
 - Add `Dwg::toJson($source)->convert()` for validated LibreDWG structural JSON output.
 - Allow missing, null, zero, and negative byte-limit settings to disable their respective limits.
 
-[Unreleased]: https://github.com/mattmy/laravel-dwg-converter/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/mattmy/laravel-dwg-converter/compare/v0.1.2...HEAD
+[0.1.2]: https://github.com/mattmy/laravel-dwg-converter/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/mattmy/laravel-dwg-converter/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/mattmy/laravel-dwg-converter/releases/tag/v0.1.0

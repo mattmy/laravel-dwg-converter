@@ -93,11 +93,6 @@ bytes。普通 string 一律視為 path。
 - `storeAs()` 將產物串流至 Laravel Storage，之後清理暫存資源。
 - `output()` 將全部 bytes 讀入 string，只適合能安全放入 PHP 記憶體的輸出。
 
-`storeAs()` 的安全 basename 可省略。明確提供時，套件保留檔名，並視需要附加可信輸出副檔名：
-`test1.webp` 維持為 `test1.webp`、`test1.png` 變成 `test1.png.webp`，`test1.WEBP` 則變成
-`test1.webp`。省略時使用本機路徑或上傳檔名的 stem；`DwgBinary` 則使用隨機的
-`converted-{16 lowercase hex}` stem。
-
 ## 錯誤與操作限制
 
 失敗時會拋出 `LibreDwgUnavailable`、`InvalidDwg` 或 `DwgOperationFailed`。每個例外都提供穩定的
