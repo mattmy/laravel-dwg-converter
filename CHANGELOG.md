@@ -6,6 +6,17 @@ All notable changes to this project will be documented in this file. Laravel DWG
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-09-30
+
+### Changed
+
+- Lower the minimum PHP version to 8.2 while retaining Laravel 12 and 13 support; CI now verifies PHP 8.2 with Laravel 12 at lowest and current dependency sets.
+
+### Fixed
+
+- Preserve the underlying JSON parser exception when LibreDWG produces malformed JSON.
+- Close an opened input stream when creating the workspace output snapshot fails.
+
 ## [0.1.2] - 2026-09-09
 
 ### Changed
@@ -30,7 +41,8 @@ All notable changes to this project will be documented in this file. Laravel DWG
 - Add `Dwg::toJson($source)->convert()` for validated LibreDWG structural JSON output.
 - Allow missing, null, zero, and negative byte-limit settings to disable their respective limits.
 
-[Unreleased]: https://github.com/mattmy/laravel-dwg-converter/compare/v0.1.2...HEAD
+[Unreleased]: https://github.com/mattmy/laravel-dwg-converter/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/mattmy/laravel-dwg-converter/compare/v0.1.2...v0.2.0
 [0.1.2]: https://github.com/mattmy/laravel-dwg-converter/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/mattmy/laravel-dwg-converter/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/mattmy/laravel-dwg-converter/releases/tag/v0.1.0

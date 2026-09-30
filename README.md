@@ -18,9 +18,11 @@ convert DWG files to DXF, structural JSON, PNG, JPEG, or WebP.
 
 | Requirement | Supported |
 |---|---|
-| PHP | 8.3 or later |
+| PHP | 8.2 or later |
 | Laravel | 12 or 13 |
-| CI-tested combinations | PHP 8.3–8.5 with Laravel 12–13, including the PHP 8.3 / Laravel 12 lowest boundary |
+| CI-tested combinations | PHP 8.2 with Laravel 12; PHP 8.3–8.5 with Laravel 12–13, including PHP 8.2 / Laravel 12 lowest and current boundaries |
+
+Laravel 13 requires PHP 8.3 or later.
 
 External commands are feature-specific. You do not need LibreOffice or ImageMagick when you only extract
 thumbnails, create DXF, or export JSON.
@@ -38,6 +40,10 @@ The package does not download or bundle these tools. For LibreDWG installation, 
 [official LibreDWG repository](https://github.com/libredwg/libredwg). The
 [external tools guide](https://mattmy.github.io/laravel-dwg-converter-doc/guide/external-tools) covers
 LibreOffice and ImageMagick installation on Ubuntu/Debian, RHEL/Fedora, and Windows.
+
+The Unit/Feature CI matrix uses fake processes and does not install external converters. End-to-end
+external-tool verification has been completed locally on Windows; reproducible Linux verification remains
+pending a redistributable DWG corpus and a pinned toolchain.
 
 ## Installation
 

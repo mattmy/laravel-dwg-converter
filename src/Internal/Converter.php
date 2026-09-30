@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Mattmy\DwgConverter\Internal;
 
 use Illuminate\Http\UploadedFile;
+use JsonException;
 use Mattmy\DwgConverter\DwgBinary;
 use Mattmy\DwgConverter\DwgOutput;
 use Mattmy\DwgConverter\DxfVersion;
@@ -19,11 +20,11 @@ use Mattmy\DwgConverter\ImageResolution;
  */
 final class Converter
 {
-    private const int PNG_SIGNATURE_BYTES = 8;
+    private const PNG_SIGNATURE_BYTES = 8;
 
-    private const int PNG_IHDR_BYTES = 24;
+    private const PNG_IHDR_BYTES = 24;
 
-    private const int MAX_IMAGE_DIMENSION = 32_768;
+    private const MAX_IMAGE_DIMENSION = 32_768;
 
     /**
      * @param  array<string, mixed>  $configuration
@@ -305,7 +306,7 @@ final class Converter
 
         $name = $source instanceof UploadedFile ? $source->getClientOriginalName() : \basename($source);
 
-        return \pathinfo($name, PATHINFO_FILENAME);
+        return \pathinfo($name, \PATHINFO_FILENAME);
     }
 
     /**
@@ -515,7 +516,7 @@ final class Converter
     }
 
     /**
-     * Validate a bounded LibreDWG JSON artifact without decoding or changing its structure.
+     * Validate a bounded LibreDWG JSON artifact without changing its structure.
      *
      * @throws DwgOperationFailed
      */
@@ -523,11 +524,17 @@ final class Converter
     {
         $this->assertBoundedFile($path, $workspace, 'json', $maxOutputBytes);
         $contents = \file_get_contents($path);
-        $isValid = \is_string($contents) && \json_validate($contents);
-        unset($contents);
-
-        if (! $isValid) {
+        if (! \is_string($contents)) {
             throw new DwgOperationFailed('json_invalid', ['operation' => 'json']);
+        }
+
+        try {
+            $decoded = \json_decode($contents, flags: \JSON_THROW_ON_ERROR);
+            unset($decoded);
+        } catch (JsonException $exception) {
+            throw new DwgOperationFailed('json_invalid', ['operation' => 'json'], $exception);
+        } finally {
+            unset($contents);
         }
     }
 
@@ -552,9 +559,9 @@ final class Converter
         };
         $image = $this->imageInfo($path);
         $expectedType = match ($format) {
-            ImageFormat::PNG => IMAGETYPE_PNG,
-            ImageFormat::JPEG => IMAGETYPE_JPEG,
-            ImageFormat::WEBP => IMAGETYPE_WEBP,
+            ImageFormat::PNG => \IMAGETYPE_PNG,
+            ImageFormat::JPEG => \IMAGETYPE_JPEG,
+            ImageFormat::WEBP => \IMAGETYPE_WEBP,
         };
         $width = $image['width'] ?? 0;
         $height = $image['height'] ?? 0;
@@ -602,12 +609,14 @@ final class Converter
     {
         $header = \file_get_contents($path, false, null, 0, 12);
         $riff = \is_string($header) ? \unpack('Vsize', \substr($header, 4, 4)) : false;
+        $riffSize = $riff['size'] ?? null;
 
         return $size >= 20
             && \is_string($header)
             && \substr($header, 0, 4) === 'RIFF'
             && \substr($header, 8, 4) === 'WEBP'
-            && $this->unpackedInteger($riff['size'] ?? null, -1) + 8 === $size;
+            && \is_int($riffSize)
+            && $riffSize + 8 === $size;
     }
 
     /**
@@ -628,14 +637,6 @@ final class Converter
         return \is_array($image)
             ? ['width' => $image[0], 'height' => $image[1], 'type' => $image[2]]
             : null;
-    }
-
-    /**
-     * Narrow one value returned by unpack to an integer.
-     */
-    private function unpackedInteger(mixed $value, int $default = 0): int
-    {
-        return \is_int($value) ? $value : $default;
     }
 
     /**

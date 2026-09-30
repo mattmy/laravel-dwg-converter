@@ -8,7 +8,6 @@ use Closure;
 use Mattmy\DwgConverter\Exceptions\LibreDwgUnavailable;
 use Mattmy\DwgConverter\Internal\ProcessRunner;
 use Mattmy\DwgConverter\Internal\Workspace;
-use Override;
 
 /**
  * Supplies deterministic LibreDWG process behavior to public Interface tests.
@@ -53,7 +52,6 @@ final class FakeProcessRunner implements ProcessRunner
      *
      * @throws LibreDwgUnavailable
      */
-    #[Override]
     public function assertAvailable(
         string $executable,
         string $operation,
@@ -70,7 +68,6 @@ final class FakeProcessRunner implements ProcessRunner
      *
      * @param  list<string>  $command
      */
-    #[Override]
     public function run(
         array $command,
         Workspace $workspace,

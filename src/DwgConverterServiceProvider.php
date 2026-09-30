@@ -9,7 +9,6 @@ use Illuminate\Support\ServiceProvider;
 use Mattmy\DwgConverter\Internal\Converter;
 use Mattmy\DwgConverter\Internal\ProcessRunner;
 use Mattmy\DwgConverter\Internal\SymfonyProcessRunner;
-use Override;
 
 /**
  * Registers the DWG converter's configuration and stateless services.
@@ -19,7 +18,6 @@ final class DwgConverterServiceProvider extends ServiceProvider
     /**
      * Register package configuration and container bindings.
      */
-    #[Override]
     public function register(): void
     {
         $this->mergeConfigFrom(__DIR__ . '/../config/dwg-converter.php', 'dwg-converter');

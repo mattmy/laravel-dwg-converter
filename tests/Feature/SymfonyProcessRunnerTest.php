@@ -14,8 +14,8 @@ use Mattmy\DwgConverter\Internal\Workspace;
  */
 function capabilityProbeExecutable(string $version, string $help): string
 {
-    $path = \sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'dwg-capability-' . \bin2hex(\random_bytes(8));
-    if (PHP_OS_FAMILY === 'Windows') {
+    $path = \sys_get_temp_dir() . \DIRECTORY_SEPARATOR . 'dwg-capability-' . \bin2hex(\random_bytes(8));
+    if (\PHP_OS_FAMILY === 'Windows') {
         $path .= '.cmd';
         $contents = "@echo off\r\n"
             . "if \"%1\"==\"--version\" echo {$version}\r\n"
@@ -26,7 +26,7 @@ function capabilityProbeExecutable(string $version, string $help): string
             . "if [ \"\$1\" = \"--help\" ]; then echo '{$help}'; fi\n";
     }
 
-    if (\file_put_contents($path, $contents) === false || (PHP_OS_FAMILY !== 'Windows' && ! \chmod($path, 0700))) {
+    if (\file_put_contents($path, $contents) === false || (\PHP_OS_FAMILY !== 'Windows' && ! \chmod($path, 0700))) {
         throw new RuntimeException('Unable to create the capability probe executable.');
     }
 
@@ -34,7 +34,7 @@ function capabilityProbeExecutable(string $version, string $help): string
 }
 
 it('rejects an executable that is not the selected LibreDWG tool', function (): void {
-    expect(fn () => (new SymfonyProcessRunner())->assertAvailable(PHP_BINARY, 'dxf'))
+    expect(fn () => (new SymfonyProcessRunner())->assertAvailable(\PHP_BINARY, 'dxf'))
         ->toThrow(LibreDwgUnavailable::class, 'unsupported_tool_capability');
 });
 
@@ -110,7 +110,7 @@ it('maps a LibreDWG decode failure to invalid input', function (): void {
         $runner = new SymfonyProcessRunner();
 
         expect(fn () => $runner->run(
-            [PHP_BINARY, '-r', 'fwrite(STDERR, "ERROR: Failed to decode file\nREAD ERROR 0x800\n"); exit(1);'],
+            [\PHP_BINARY, '-r', 'fwrite(STDERR, "ERROR: Failed to decode file\nREAD ERROR 0x800\n"); exit(1);'],
             $workspace,
             5.0,
             1024,
@@ -131,7 +131,7 @@ it('maps a LibreDWG read failure to invalid input', function (): void {
 
     try {
         expect(fn () => (new SymfonyProcessRunner())->run(
-            [PHP_BINARY, '-r', 'fwrite(STDERR, "Unable to read file input.dwg. ERROR 0x800"); exit(1);'],
+            [\PHP_BINARY, '-r', 'fwrite(STDERR, "Unable to read file input.dwg. ERROR 0x800"); exit(1);'],
             $workspace,
             5.0,
             1024,
@@ -152,7 +152,7 @@ it('allows a recoverable diagnostic when the process succeeds', function (): voi
 
     try {
         (new SymfonyProcessRunner())->run(
-            [PHP_BINARY, '-r', 'fwrite(STDERR, "warning: unsupported object");'],
+            [\PHP_BINARY, '-r', 'fwrite(STDERR, "warning: unsupported object");'],
             $workspace,
             5.0,
             1024,
@@ -177,7 +177,7 @@ it('maps process timeout without leaving a workspace', function (): void {
         $runner = new SymfonyProcessRunner();
 
         expect(fn () => $runner->run(
-            [PHP_BINARY, '-r', 'usleep(500000);'],
+            [\PHP_BINARY, '-r', 'usleep(500000);'],
             $workspace,
             0.05,
             1024,
@@ -200,7 +200,7 @@ it('stops stdout that exceeds the configured limit', function (): void {
         $runner = new SymfonyProcessRunner();
 
         expect(fn () => $runner->run(
-            [PHP_BINARY, '-r', 'echo str_repeat("x", 1024);'],
+            [\PHP_BINARY, '-r', 'echo str_repeat("x", 1024);'],
             $workspace,
             5.0,
             16,
@@ -223,7 +223,7 @@ it('allows stdout of any size when its limit is disabled', function (): void {
     try {
         $output = $workspace->outputPath('output.png');
         (new SymfonyProcessRunner())->run(
-            [PHP_BINARY, '-r', 'echo str_repeat("x", 1024);'],
+            [\PHP_BINARY, '-r', 'echo str_repeat("x", 1024);'],
             $workspace,
             5.0,
             null,
@@ -249,7 +249,7 @@ it('redacts paths from a generic process failure', function (): void {
         $runner = new SymfonyProcessRunner();
 
         $runner->run(
-            [PHP_BINARY, '-r', 'fwrite(STDERR, "failed C:\\\\private\\\\drawing.dwg"); exit(7);'],
+            [\PHP_BINARY, '-r', 'fwrite(STDERR, "failed C:\\\\private\\\\drawing.dwg"); exit(7);'],
             $workspace,
             5.0,
             1024,

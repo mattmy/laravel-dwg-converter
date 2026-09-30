@@ -7,21 +7,20 @@ namespace Mattmy\DwgConverter\Internal;
 use Mattmy\DwgConverter\Exceptions\DwgOperationFailed;
 use Mattmy\DwgConverter\Exceptions\InvalidDwg;
 use Mattmy\DwgConverter\Exceptions\LibreDwgUnavailable;
-use Override;
 use Symfony\Component\Process\Exception\ProcessTimedOutException;
 use Symfony\Component\Process\Process;
 
 /**
- * Runs LibreDWG commands through Symfony Process.
+ * Runs external conversion commands through Symfony Process.
  */
 final class SymfonyProcessRunner implements ProcessRunner
 {
-    private const float CAPABILITY_PROBE_TIMEOUT = 10.0;
+    private const CAPABILITY_PROBE_TIMEOUT = 10.0;
 
-    private const int STDERR_LIMIT = 4096;
+    private const STDERR_LIMIT = 4096;
 
     /** @var array<string, list<string>> */
-    private const array REQUIRED_CAPABILITIES = [
+    private const REQUIRED_CAPABILITIES = [
         'dwgbmp' => ['dwgfile'],
         'dwg2dxf' => ['--as', '-o'],
         'dwgread' => ['--format', 'json', '-o'],
@@ -34,7 +33,6 @@ final class SymfonyProcessRunner implements ProcessRunner
      *
      * @throws LibreDwgUnavailable
      */
-    #[Override]
     public function assertAvailable(
         string $executable,
         string $operation,
@@ -104,7 +102,6 @@ final class SymfonyProcessRunner implements ProcessRunner
      * @throws DwgOperationFailed
      * @throws InvalidDwg
      */
-    #[Override]
     public function run(
         array $command,
         Workspace $workspace,

@@ -18,9 +18,11 @@ Laravel DWG Converter 讓 Laravel 應用擷取 DWG 檔案的內嵌縮圖，或�
 
 | 需求 | 支援範圍 |
 |---|---|
-| PHP | 8.3 或更新版本 |
+| PHP | 8.2 或更新版本 |
 | Laravel | 12 或 13 |
-| CI 實測組合 | PHP 8.3–8.5 搭配 Laravel 12–13，包含 PHP 8.3／Laravel 12 lowest boundary |
+| CI 實測組合 | PHP 8.2 搭配 Laravel 12；PHP 8.3–8.5 搭配 Laravel 12–13，包含 PHP 8.2／Laravel 12 lowest 與 current boundary |
+
+Laravel 13 需要 PHP 8.3 或更新版本。
 
 外部 commands 依功能而異。只擷取縮圖、建立 DXF 或輸出 JSON 時，不需要安裝 LibreOffice 或
 ImageMagick。
@@ -38,6 +40,9 @@ ImageMagick。
 [LibreDWG 官方 repository](https://github.com/libredwg/libredwg)。
 [外部工具指南](https://mattmy.github.io/laravel-dwg-converter-doc/zh-TW/guide/external-tools)提供
 Ubuntu／Debian、RHEL／Fedora 與 Windows 的 LibreOffice、ImageMagick 安裝方式。
+
+Unit／Feature CI matrix 使用 fake process，不安裝外部轉換工具。外部工具的端對端驗證已在 Windows
+本機完成；可重現的 Linux 驗證仍待取得可再散布的 DWG corpus 與固定 toolchain。
 
 ## 安裝
 

@@ -121,7 +121,7 @@ it('uses the source stem with the detected thumbnail extension when no storage n
 
         $stored = Dwg::thumbnail($source)->extract()->storeAs('', disk: 'exports');
 
-        expect($stored)->toBe(\pathinfo($source, PATHINFO_FILENAME) . '.png')
+        expect($stored)->toBe(\pathinfo($source, \PATHINFO_FILENAME) . '.png')
             ->and(Storage::disk('exports')->exists($stored))->toBeTrue();
     } finally {
         if (\is_file($source)) {

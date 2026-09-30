@@ -36,8 +36,16 @@ it('rejects an invalid JSON artifact', function (): void {
     );
     app()->instance(ProcessRunner::class, $runner);
 
-    expect(fn () => Dwg::toJson(DwgBinary::from('AC1032 drawing'))->convert())
-        ->toThrow(DwgOperationFailed::class, 'json_invalid');
+    try {
+        Dwg::toJson(DwgBinary::from('AC1032 drawing'))->convert();
+    } catch (DwgOperationFailed $failure) {
+        expect($failure->reason())->toBe('json_invalid')
+            ->and($failure->getPrevious())->toBeInstanceOf(JsonException::class);
+
+        return;
+    }
+
+    throw new RuntimeException('The invalid JSON artifact was not rejected.');
 });
 
 it('preserves any valid JSON structure returned by dwgread', function (string $contents): void {
@@ -51,6 +59,7 @@ it('preserves any valid JSON structure returned by dwgread', function (string $c
     'nested object' => ['{"payload":{"FILEHEADER":{},"HEADER":{},"OBJECTS":{}}}'],
     'different key order' => ['{"HEADER":{},"FILEHEADER":{},"OBJECTS":{}}'],
     'array root' => ['[{"type":"LINE"}]'],
+    'null root' => ['null'],
 ]);
 
 it('rejects JSON output above its dedicated validation limit', function (): void {
@@ -58,7 +67,7 @@ it('rejects JSON output above its dedicated validation limit', function (): void
     $runner = FakeProcessRunner::writesFile(
         'drawing.json',
         '{"created_by":"LibreDWG 0.14","FILEHEADER":{},"HEADER":{},"OBJECTS":{},"padding":"' .
-            str_repeat('x', 64) . '"}',
+            \str_repeat('x', 64) . '"}',
     );
     app()->instance(ProcessRunner::class, $runner);
 
@@ -79,7 +88,7 @@ it('uses the general output limit when it is lower than the JSON limit', functio
     $runner = FakeProcessRunner::writesFile(
         'drawing.json',
         '{"created_by":"LibreDWG 0.14","FILEHEADER":{},"HEADER":{},"OBJECTS":{},"padding":"' .
-            str_repeat('x', 64) . '"}',
+            \str_repeat('x', 64) . '"}',
     );
     app()->instance(ProcessRunner::class, $runner);
 

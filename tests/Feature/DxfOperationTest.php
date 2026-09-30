@@ -79,7 +79,7 @@ it('uses an absolute source path stem when no storage name is provided', functio
 
         $stored = Dwg::toDxf($source)->convert()->storeAs('', disk: 'exports');
 
-        expect($stored)->toBe(\pathinfo($source, PATHINFO_FILENAME) . '.dxf')
+        expect($stored)->toBe(\pathinfo($source, \PATHINFO_FILENAME) . '.dxf')
             ->and(Storage::disk('exports')->exists($stored))->toBeTrue();
     } finally {
         if (\is_file($source)) {

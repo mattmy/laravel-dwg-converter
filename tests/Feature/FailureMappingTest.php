@@ -27,7 +27,7 @@ it('maps invalid published configuration to an environment failure', function (
     'temporary root' => ['temporary_directory', 'relative/path'],
     'foreign absolute temporary root' => [
         'temporary_directory',
-        DIRECTORY_SEPARATOR === '\\' ? '/tmp/dwg-converter' : 'C:\\temp\\dwg-converter',
+        \DIRECTORY_SEPARATOR === '\\' ? '/tmp/dwg-converter' : 'C:\\temp\\dwg-converter',
     ],
     'executables shape' => ['executables', 'dwgbmp'],
 ]);

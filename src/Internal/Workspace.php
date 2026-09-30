@@ -15,7 +15,7 @@ use Mattmy\DwgConverter\Exceptions\LibreDwgUnavailable;
  */
 final class Workspace
 {
-    private const int COPY_CHUNK_BYTES = 1_048_576;
+    private const COPY_CHUNK_BYTES = 1_048_576;
 
     private bool $cleaned = false;
 
@@ -46,7 +46,7 @@ final class Workspace
         }
 
         try {
-            $directory = $temporaryDirectory . DIRECTORY_SEPARATOR . \bin2hex(\random_bytes(16));
+            $directory = $temporaryDirectory . \DIRECTORY_SEPARATOR . \bin2hex(\random_bytes(16));
         } catch (\Throwable $exception) {
             throw new LibreDwgUnavailable('invalid_configuration', ['operation' => $operation], $exception);
         }
@@ -81,7 +81,7 @@ final class Workspace
      */
     public function inputPath(): string
     {
-        return $this->directory . DIRECTORY_SEPARATOR . 'input.dwg';
+        return $this->directory . \DIRECTORY_SEPARATOR . 'input.dwg';
     }
 
     /**
@@ -89,7 +89,7 @@ final class Workspace
      */
     public function outputPath(string $name): string
     {
-        return $this->directory . DIRECTORY_SEPARATOR . $name;
+        return $this->directory . \DIRECTORY_SEPARATOR . $name;
     }
 
     /**
@@ -102,7 +102,7 @@ final class Workspace
 
         return \is_string($directory)
             && \is_string($realPath)
-            && \str_starts_with($realPath, $directory . DIRECTORY_SEPARATOR);
+            && \str_starts_with($realPath, $directory . \DIRECTORY_SEPARATOR);
     }
 
     /**
@@ -111,8 +111,6 @@ final class Workspace
     public function cleanup(): void
     {
         if ($this->cleaned) {
-            $this->cleaned = true;
-
             return;
         }
 
@@ -145,7 +143,7 @@ final class Workspace
                     continue;
                 }
 
-                $path = $directory . DIRECTORY_SEPARATOR . $item;
+                $path = $directory . \DIRECTORY_SEPARATOR . $item;
                 if (\is_dir($path) && ! \is_link($path)) {
                     $this->removeDirectory($path);
                 } else {
@@ -235,11 +233,13 @@ final class Workspace
     private function copyPath(string $path, ?int $maxInputBytes, string $operation): void
     {
         $input = \fopen($path, 'rb');
+        if ($input === false) {
+            throw new DwgOperationFailed('input_snapshot_failed', ['operation' => $operation]);
+        }
+
         $output = \fopen($this->inputPath(), 'xb');
-        if ($input === false || $output === false) {
-            if (\is_resource($input)) {
-                \fclose($input);
-            }
+        if ($output === false) {
+            \fclose($input);
 
             throw new DwgOperationFailed('input_snapshot_failed', ['operation' => $operation]);
         }
@@ -264,7 +264,7 @@ final class Workspace
             throw new InvalidDwg('input_too_large', ['operation' => $operation]);
         }
 
-        if (\file_put_contents($this->inputPath(), $contents, LOCK_EX) === false) {
+        if (\file_put_contents($this->inputPath(), $contents, \LOCK_EX) === false) {
             throw new DwgOperationFailed('input_snapshot_failed', ['operation' => $operation]);
         }
     }
@@ -303,7 +303,7 @@ final class Workspace
      */
     public static function isAbsolutePath(string $path): bool
     {
-        return DIRECTORY_SEPARATOR === '\\'
+        return \DIRECTORY_SEPARATOR === '\\'
             ? \preg_match('/^[A-Za-z]:[\\\\\/]/', $path) === 1
             : \str_starts_with($path, '/');
     }

@@ -36,34 +36,46 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - php: '8.3'
+          - php: '8.2'
             laravel: '12.0'
             testbench: '10.0'
             flags: '--prefer-lowest --prefer-stable'
+            verify-php-82-tools: false
+          - php: '8.2'
+            laravel: '12.0'
+            testbench: '10.0'
+            flags: ''
+            verify-php-82-tools: true
           - php: '8.3'
             laravel: '12.0'
             testbench: '10.0'
             flags: ''
+            verify-php-82-tools: false
           - php: '8.3'
             laravel: '13.0'
             testbench: '11.0'
             flags: ''
+            verify-php-82-tools: false
           - php: '8.4'
             laravel: '12.0'
             testbench: '10.0'
             flags: ''
+            verify-php-82-tools: false
           - php: '8.4'
             laravel: '13.0'
             testbench: '11.0'
             flags: ''
+            verify-php-82-tools: false
           - php: '8.5'
             laravel: '12.0'
             testbench: '10.0'
             flags: ''
+            verify-php-82-tools: false
           - php: '8.5'
             laravel: '13.0'
             testbench: '11.0'
             flags: ''
+            verify-php-82-tools: false
     steps:
       - uses: actions/checkout@v4
       - uses: shivammathur/setup-php@v2
@@ -82,6 +94,10 @@ jobs:
       - run: php --version
       - run: composer show laravel/framework
       - run: composer show orchestra/testbench
+      - if: matrix.verify-php-82-tools
+        run: vendor/bin/pint --test
+      - if: matrix.verify-php-82-tools
+        run: composer analyse
       - run: vendor/bin/pest --testsuite=Unit,Feature
 
   archive:
