@@ -88,7 +88,8 @@ it('converts a real DWG to the selected DXF version', function () use ($source):
 it('converts a real DWG to valid structural JSON', function () use ($source): void {
     $contents = Dwg::toJson($source)->convert()->output();
 
-    expect(\json_validate($contents))->toBeTrue()
+    expect(static fn () => \json_decode($contents, flags: \JSON_THROW_ON_ERROR))
+        ->not->toThrow(JsonException::class)
         ->and($contents)->toContain('"FILEHEADER"')
         ->and($contents)->toContain('"HEADER"')
         ->and($contents)->toContain('"OBJECTS"');
@@ -101,7 +102,8 @@ it('converts a real DWG with all byte limits disabled', function () use ($source
 
     $contents = Dwg::toJson($source)->convert()->output();
 
-    expect(\json_validate($contents))->toBeTrue()
+    expect(static fn () => \json_decode($contents, flags: \JSON_THROW_ON_ERROR))
+        ->not->toThrow(JsonException::class)
         ->and($contents)->toContain('"FILEHEADER"')
         ->and($contents)->toContain('"HEADER"')
         ->and($contents)->toContain('"OBJECTS"');

@@ -7,7 +7,6 @@ namespace Mattmy\DwgConverter\Tests;
 use Illuminate\Foundation\Application;
 use Mattmy\DwgConverter\DwgConverterServiceProvider;
 use Orchestra\Testbench\TestCase as Orchestra;
-use Override;
 
 /**
  * Boots a minimal Laravel application with the package provider.
@@ -19,7 +18,6 @@ abstract class TestCase extends Orchestra
     /**
      * Give each test an isolated package temporary root.
      */
-    #[Override]
     protected function setUp(): void
     {
         parent::setUp();
@@ -33,7 +31,6 @@ abstract class TestCase extends Orchestra
     /**
      * Assert that every package-owned workspace was removed.
      */
-    #[Override]
     protected function tearDown(): void
     {
         try {
@@ -54,7 +51,6 @@ abstract class TestCase extends Orchestra
      * @param  Application  $app
      * @return list<class-string>
      */
-    #[Override]
     protected function getPackageProviders($app): array
     {
         return [DwgConverterServiceProvider::class];

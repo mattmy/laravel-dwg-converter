@@ -99,7 +99,7 @@ function successfulImageRunner(): FakeProcessRunner
             \file_put_contents($workspace->outputPath('drawing.' . $format->value), imageFixture($format));
         } elseif ($command[0] === 'magick') {
             $output = lastCommandArgument($command);
-            $format = match (\pathinfo($output, PATHINFO_EXTENSION)) {
+            $format = match (\pathinfo($output, \PATHINFO_EXTENSION)) {
                 'png' => ImageFormat::PNG,
                 'jpg' => ImageFormat::JPEG,
                 'webp' => ImageFormat::WEBP,

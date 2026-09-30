@@ -16,11 +16,11 @@ use Throwable;
  */
 final class DwgOutput
 {
-    private const string READY = 'ready';
+    private const READY = 'ready';
 
-    private const string CONSUMING = 'consuming';
+    private const CONSUMING = 'consuming';
 
-    private const string CONSUMED = 'consumed';
+    private const CONSUMED = 'consumed';
 
     private string $state = self::READY;
 

@@ -9,7 +9,7 @@ use Mattmy\DwgConverter\Exceptions\InvalidDwg;
 use Mattmy\DwgConverter\Exceptions\LibreDwgUnavailable;
 
 /**
- * Defines the internal seam for executing LibreDWG processes.
+ * Defines the internal seam for executing external conversion processes.
  */
 interface ProcessRunner
 {
@@ -26,7 +26,7 @@ interface ProcessRunner
     ): void;
 
     /**
-     * Execute one isolated LibreDWG command.
+     * Execute one isolated external conversion command.
      *
      * @param  list<string>  $command
      *
