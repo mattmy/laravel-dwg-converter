@@ -12,6 +12,7 @@ All notable changes to this project will be documented in this file. Laravel DWG
 
 ### Fixed
 
+- Validate embedded BMP, PNG, and WMF thumbnail headers and container bounds before returning their original bytes, without adding an image decoder dependency.
 - Map temporary-directory and snapshot filesystem warnings to the existing package failures, close source streams when snapshot creation fails, and reject incomplete binary snapshot writes.
 - Reject NUL bytes in source and temporary-directory paths through the existing input and configuration contracts.
 - Check archive entry names directly so the CI exclusion gate also detects forbidden files at the archive root.

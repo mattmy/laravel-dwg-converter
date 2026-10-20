@@ -7,6 +7,7 @@ use Mattmy\DwgConverter\Exceptions\InvalidDwg;
 use Mattmy\DwgConverter\Facades\Dwg;
 use Mattmy\DwgConverter\Internal\ProcessRunner;
 use Mattmy\DwgConverter\Tests\Fakes\FakeProcessRunner;
+use Mattmy\DwgConverter\Tests\Fakes\ThumbnailFixture;
 
 it('binds the source before thumbnail extraction', function (): void {
     expect(fn () => Dwg::thumbnail('relative.dwg')->extract())
@@ -18,7 +19,7 @@ it('extracts a thumbnail through the public interface', function (): void {
 
     $runner = FakeProcessRunner::writesFile(
         'input.png',
-        "\x89PNG\r\n\x1a\n" . \str_repeat("\0", 12) . "\0\0\0\0IEND\xaeB`\x82",
+        ThumbnailFixture::png(),
     );
     app()->instance(ProcessRunner::class, $runner);
 

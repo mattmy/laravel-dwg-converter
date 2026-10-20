@@ -8,9 +8,10 @@ use Mattmy\DwgConverter\Exceptions\InvalidDwg;
 use Mattmy\DwgConverter\Facades\Dwg;
 use Mattmy\DwgConverter\Internal\ProcessRunner;
 use Mattmy\DwgConverter\Tests\Fakes\FakeProcessRunner;
+use Mattmy\DwgConverter\Tests\Fakes\ThumbnailFixture;
 
 it('snapshots explicit binary bytes without changing them', function (): void {
-    $runner = FakeProcessRunner::writesFile('input.png', "\x89PNG\r\n\x1a\n" . \str_repeat("\0", 12) . "\0\0\0\0IEND\xaeB`\x82");
+    $runner = FakeProcessRunner::writesFile('input.png', ThumbnailFixture::png());
     app()->instance(ProcessRunner::class, $runner);
 
     Dwg::thumbnail(DwgBinary::from('AC1032 binary'))->extract()->output();
@@ -25,7 +26,7 @@ it('snapshots an absolute path without taking ownership of it', function (): voi
     }
 
     try {
-        $runner = FakeProcessRunner::writesFile('input.png', "\x89PNG\r\n\x1a\n" . \str_repeat("\0", 12) . "\0\0\0\0IEND\xaeB`\x82");
+        $runner = FakeProcessRunner::writesFile('input.png', ThumbnailFixture::png());
         app()->instance(ProcessRunner::class, $runner);
 
         Dwg::thumbnail($path)->extract()->output();
@@ -46,7 +47,7 @@ it('snapshots a valid upload without trusting its metadata', function (): void {
     }
 
     try {
-        $runner = FakeProcessRunner::writesFile('input.png', "\x89PNG\r\n\x1a\n" . \str_repeat("\0", 12) . "\0\0\0\0IEND\xaeB`\x82");
+        $runner = FakeProcessRunner::writesFile('input.png', ThumbnailFixture::png());
         app()->instance(ProcessRunner::class, $runner);
         $upload = new UploadedFile($path, 'not-a-drawing.txt', 'text/plain', null, true);
 

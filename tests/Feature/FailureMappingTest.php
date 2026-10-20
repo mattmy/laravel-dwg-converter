@@ -10,6 +10,7 @@ use Mattmy\DwgConverter\Facades\Dwg;
 use Mattmy\DwgConverter\Internal\ProcessRunner;
 use Mattmy\DwgConverter\Internal\Workspace;
 use Mattmy\DwgConverter\Tests\Fakes\FakeProcessRunner;
+use Mattmy\DwgConverter\Tests\Fakes\ThumbnailFixture;
 
 it('maps invalid published configuration to an environment failure', function (
     string $key,
@@ -37,7 +38,7 @@ it('checks only the executable needed by the selected operation', function (): v
     config()->set('dwg-converter.executables.imagemagick', '');
     $runner = FakeProcessRunner::writesFile(
         'input.png',
-        "\x89PNG\r\n\x1a\n" . \str_repeat("\0", 12) . "IEND\xaeB`\x82",
+        ThumbnailFixture::png(),
     );
     app()->instance(ProcessRunner::class, $runner);
 
