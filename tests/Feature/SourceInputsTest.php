@@ -74,7 +74,7 @@ it('rejects a UNC source because only local paths are supported', function (): v
 });
 
 it('rejects an invalid upload before starting LibreDWG', function (): void {
-    $upload = new UploadedFile('missing.dwg', 'drawing.dwg', null, UPLOAD_ERR_PARTIAL, true);
+    $upload = new UploadedFile('missing.dwg', 'drawing.dwg', null, \UPLOAD_ERR_PARTIAL, true);
 
     expect(fn () => Dwg::thumbnail($upload)->extract())
         ->toThrow(InvalidDwg::class, 'invalid_upload');

@@ -82,7 +82,7 @@ it('cleans an output abandoned before consumption', function (): void {
 
     $output = Dwg::toDxf(DwgBinary::from('AC1032 drawing'))->convert();
     unset($output);
-    gc_collect_cycles();
+    \gc_collect_cycles();
 
     expect(\scandir(config()->string('dwg-converter.temporary_directory')))->toBe(['.', '..']);
 });
