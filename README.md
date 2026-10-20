@@ -2,8 +2,9 @@
 
 [繁體中文](README.zh-TW.md)
 
-Laravel DWG Converter lets Laravel applications extract embedded thumbnails from DWG files and
-convert DWG files to DXF, structural JSON, PNG, JPEG, or WebP.
+Laravel DWG Converter integrates LibreDWG command-line tools into Laravel applications
+to extract embedded DWG thumbnails and convert DWG files to DXF or structural JSON. Creating PNG,
+JPEG, or WebP previews also requires LibreOffice and ImageMagick.
 
 ## Features
 
