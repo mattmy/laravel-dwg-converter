@@ -131,7 +131,7 @@ final class SymfonyProcessRunner implements ProcessRunner
                 'exit_code' => $process->getExitCode(),
                 'stderr' => $this->summary($stderr),
             ];
-            if ($this->isRejectedInput($stderr)) {
+            if (($operation !== 'image' || $stage === 'dwg2dxf') && $this->isRejectedInput($stderr)) {
                 throw new InvalidDwg('libredwg_rejected_input', $context);
             }
 

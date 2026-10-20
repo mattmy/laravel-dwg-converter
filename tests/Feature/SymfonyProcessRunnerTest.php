@@ -140,6 +140,31 @@ it('maps a LibreDWG read failure to invalid input', function (): void {
     }
 });
 
+it('classifies image stage read failures according to the tool reading the input', function (string $stage, string $exception, string $reason): void {
+    $workspace = Workspace::fromSource(
+        DwgBinary::from('AC1032 drawing'),
+        config()->string('dwg-converter.temporary_directory'),
+        1024,
+        'image',
+    );
+
+    try {
+        expect(fn () => (new SymfonyProcessRunner())->run(
+            [\PHP_BINARY, '-r', 'fwrite(STDERR, "Unable to read file intermediate"); exit(1);'],
+            $workspace,
+            5.0,
+            'image',
+            $stage,
+        ))->toThrow($exception, $reason);
+    } finally {
+        $workspace->cleanup();
+    }
+})->with([
+    'DWG decoder' => ['dwg2dxf', InvalidDwg::class, 'libredwg_rejected_input'],
+    'LibreOffice DXF reader' => ['libreoffice', DwgOperationFailed::class, 'process_failed'],
+    'ImageMagick image reader' => ['imagemagick', DwgOperationFailed::class, 'process_failed'],
+]);
+
 it('allows a recoverable diagnostic when the process succeeds', function (): void {
     $workspace = Workspace::fromSource(
         DwgBinary::from('AC1032 drawing'),
