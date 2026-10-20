@@ -25,6 +25,7 @@ it('maps invalid published configuration to an environment failure', function (
     'input limit type' => ['max_input_bytes', 'large'],
     'output limit type' => ['max_output_bytes', 1.5],
     'temporary root' => ['temporary_directory', 'relative/path'],
+    'NUL temporary root' => ['temporary_directory', \sys_get_temp_dir() . "/dwg\0root"],
     'foreign absolute temporary root' => [
         'temporary_directory',
         \DIRECTORY_SEPARATOR === '\\' ? '/tmp/dwg-converter' : 'C:\\temp\\dwg-converter',

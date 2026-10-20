@@ -73,6 +73,13 @@ it('rejects a UNC source because only local paths are supported', function (): v
         ->toThrow(InvalidDwg::class, 'input_not_absolute');
 });
 
+it('rejects a NUL byte in an absolute source path through the input contract', function (): void {
+    $path = \sys_get_temp_dir() . "/drawing\0.dwg";
+
+    expect(fn () => Dwg::toDxf($path)->convert())
+        ->toThrow(InvalidDwg::class, 'input_not_readable');
+});
+
 it('rejects an invalid upload before starting LibreDWG', function (): void {
     $upload = new UploadedFile('missing.dwg', 'drawing.dwg', null, \UPLOAD_ERR_PARTIAL, true);
 

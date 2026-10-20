@@ -42,6 +42,7 @@ final class Workspace
         string $operation,
     ): self {
         if (! self::isAbsolutePath($temporaryDirectory)
+            || \str_contains($temporaryDirectory, "\0")
             || (\file_exists($temporaryDirectory) && ! \is_dir($temporaryDirectory))) {
             throw new LibreDwgUnavailable('invalid_configuration', ['operation' => $operation]);
         }
@@ -253,7 +254,7 @@ final class Workspace
             throw new InvalidDwg('input_not_absolute', ['operation' => $operation]);
         }
 
-        if (\str_contains($path, '://')) {
+        if (\str_contains($path, '://') || \str_contains($path, "\0")) {
             throw new InvalidDwg('input_not_readable', ['operation' => $operation]);
         }
 
