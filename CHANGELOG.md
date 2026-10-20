@@ -6,6 +6,18 @@ All notable changes to this project will be documented in this file. Laravel DWG
 
 ## [Unreleased]
 
+### Removed
+
+- Remove the unused internal stdout-to-file sink and its runner-only size parameter; artifact byte limits and process diagnostics remain unchanged.
+
+### Fixed
+
+- Refresh artifact metadata before terminal delivery so cached sizes cannot bypass output limits.
+- Keep LibreOffice and ImageMagick read failures as process failures rather than invalid DWG input.
+- Report truncated WebP artifacts as `image_invalid` before reading their RIFF length.
+- Preserve primary failures during explicit snapshot/conversion cleanup and terminal consumption; consumed outputs no longer repeat cleanup in their destructor.
+- Report `invalid_configuration` when the configured temporary directory is an existing file.
+
 ## [0.2.0] - 2026-09-30
 
 ### Changed
