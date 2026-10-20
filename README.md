@@ -98,6 +98,7 @@ Each successful operation returns a one-time `DwgOutput`:
 
 - `extension()` and `mimeType()` inspect trusted output metadata without consuming it.
 - `storeAs()` streams the artifact to Laravel Storage and then attempts temporary cleanup.
+- `DwgOutput` cannot be cloned, serialized, or unserialized; these attempts throw `LogicException`.
 - `output()` returns all bytes as a string and should only be used for outputs that safely fit in PHP memory.
 
 ## Errors and operational limits

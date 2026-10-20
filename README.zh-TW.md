@@ -97,6 +97,7 @@ bytes。普通 string 一律視為 path。
 
 - `extension()` 與 `mimeType()` 可在不消費結果的情況下讀取可信的輸出資訊。
 - `storeAs()` 將產物串流至 Laravel Storage，之後嘗試清理暫存資源。
+- `DwgOutput` 不可複製、序列化或反序列化；這些嘗試會拋出 `LogicException`。
 - `output()` 將全部 bytes 讀入 string，只適合能安全放入 PHP 記憶體的輸出。
 
 ## 錯誤與操作限制
