@@ -7,10 +7,11 @@ use Mattmy\DwgConverter\Exceptions\DwgOperationFailed;
 use Mattmy\DwgConverter\Facades\Dwg;
 use Mattmy\DwgConverter\Internal\ProcessRunner;
 use Mattmy\DwgConverter\Tests\Fakes\FakeProcessRunner;
+use Mattmy\DwgConverter\Tests\Fakes\ThumbnailFixture;
 
 it('does not enforce non-positive or null input limits', function (?int $limit): void {
     config()->set('dwg-converter.max_input_bytes', $limit);
-    $runner = FakeProcessRunner::writesFile('input.png', "\x89PNG\r\n\x1a\n" . \str_repeat("\0", 12) . "IEND\xaeB`\x82");
+    $runner = FakeProcessRunner::writesFile('input.png', ThumbnailFixture::png());
     app()->instance(ProcessRunner::class, $runner);
 
     expect(Dwg::thumbnail(DwgBinary::from('AC1032 drawing'))->extract()->output())
@@ -29,7 +30,7 @@ it('does not enforce a missing input limit', function (): void {
 
     unset($configuration['max_input_bytes']);
     config()->set('dwg-converter', $configuration);
-    $runner = FakeProcessRunner::writesFile('input.png', "\x89PNG\r\n\x1a\n" . \str_repeat("\0", 12) . "IEND\xaeB`\x82");
+    $runner = FakeProcessRunner::writesFile('input.png', ThumbnailFixture::png());
     app()->instance(ProcessRunner::class, $runner);
 
     expect(Dwg::thumbnail(DwgBinary::from('AC1032 drawing'))->extract()->output())

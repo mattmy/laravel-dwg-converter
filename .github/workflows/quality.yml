@@ -112,7 +112,7 @@ jobs:
       - run: composer archive --format=zip --file=laravel-dwg-converter
       - name: Verify the Composer archive
         run: |
-          unzip -l laravel-dwg-converter.zip | tee archive-contents.txt
+          unzip -Z1 laravel-dwg-converter.zip | tee archive-contents.txt
           grep -q 'composer.json' archive-contents.txt
           grep -q 'src/' archive-contents.txt
           grep -q 'config/' archive-contents.txt

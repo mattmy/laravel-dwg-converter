@@ -14,9 +14,7 @@ it('rejects a forged DWG candidate through every public operation', function (st
         array $_command,
         Workspace $_workspace,
         float $_timeout,
-        ?int $_maxOutputBytes,
         string $operation,
-        ?string $_stdoutPath,
     ): void {
         throw new InvalidDwg('libredwg_rejected_input', ['operation' => $operation]);
     });

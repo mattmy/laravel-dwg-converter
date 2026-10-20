@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Mattmy\DwgConverter\DwgBinary;
 use Mattmy\DwgConverter\DwgOutput;
@@ -9,6 +10,7 @@ use Mattmy\DwgConverter\Exceptions\DwgOperationFailed;
 use Mattmy\DwgConverter\Facades\Dwg;
 use Mattmy\DwgConverter\Internal\ProcessRunner;
 use Mattmy\DwgConverter\Internal\Workspace;
+use Mattmy\DwgConverter\Tests\Fakes\FailedCleanupStream;
 use Mattmy\DwgConverter\Tests\Fakes\FakeProcessRunner;
 
 it('allows exactly one terminal consumption', function (): void {
@@ -22,6 +24,103 @@ it('allows exactly one terminal consumption', function (): void {
         ->and($output->output())->toBe($contents)
         ->and(fn () => $output->output())->toThrow(LogicException::class);
 });
+
+it('rejects copying a result without changing its original lifecycle', function (string $method, bool $consumed): void {
+    $contents = "0\nSECTION\n2\nENTITIES\n0\nENDSEC\n0\nEOF\n";
+    app()->instance(ProcessRunner::class, FakeProcessRunner::writesFile('output.dxf', $contents));
+    $output = Dwg::toDxf(DwgBinary::from('AC1032 drawing'))->convert();
+    if ($consumed) {
+        expect($output->output())->toBe($contents);
+    }
+
+    expect(fn () => $method === 'clone' ? clone $output : \serialize($output))
+        ->toThrow(LogicException::class);
+    \gc_collect_cycles();
+    expect($output->extension())->toBe('dxf')->and($output->mimeType())->toBe('image/vnd.dxf');
+    if (! $consumed) {
+        expect($output->output())->toBe($contents);
+    }
+    expect(fn () => $output->output())->toThrow(LogicException::class);
+})->with(['clone', 'serialize'])->with([[false], [true]]);
+
+it('rejects direct result hydration without cleaning the original workspace', function (bool $consumed): void {
+    $workspace = Workspace::fromSource(DwgBinary::from('AC1032 drawing'), config()->string('dwg-converter.temporary_directory'), 1024, 'dxf');
+    $path = $workspace->outputPath('output.dxf');
+    \file_put_contents($path, 'artifact');
+    $output = new DwgOutput($workspace, $path, 'dxf', 'image/vnd.dxf', 1024, 'dxf');
+    if ($consumed) {
+        expect($output->output())->toBe('artifact');
+    }
+
+    $class = DwgOutput::class;
+    $payload = 'O:' . \strlen($class) . ':"' . $class . '":2:{'
+        . \serialize("\0{$class}\0workspace") . \serialize($workspace)
+        . \serialize("\0{$class}\0state") . \serialize('ready') . '}';
+
+    expect(fn () => \unserialize($payload))->toThrow(LogicException::class);
+    \gc_collect_cycles();
+    if (! $consumed) {
+        expect($output->output())->toBe('artifact');
+    }
+    expect(fn () => $output->output())->toThrow(LogicException::class);
+})->with([[false], [true]]);
+
+it('rejects an empty serialized result without a destructor error', function (): void {
+    $class = DwgOutput::class;
+
+    expect(fn () => \unserialize('O:' . \strlen($class) . ':"' . $class . '":0:{}'))
+        ->toThrow(LogicException::class);
+});
+
+it('rechecks the current artifact size before terminal consumption', function (string $terminal): void {
+    Storage::fake('exports');
+    $workspace = Workspace::fromSource(
+        DwgBinary::from('AC1032 drawing'),
+        config()->string('dwg-converter.temporary_directory'),
+        1024,
+        'dxf',
+    );
+    $artifact = $workspace->outputPath('output.dxf');
+    if (\file_put_contents($artifact, 'initial') !== 7) {
+        throw new RuntimeException('Unable to create the output fixture.');
+    }
+    $output = new DwgOutput($workspace, $artifact, 'dxf', 'image/vnd.dxf', 8, 'dxf');
+    expect(\filesize($artifact))->toBe(7);
+    if (\file_put_contents($artifact, 'now oversized') !== 13) {
+        throw new RuntimeException('Unable to grow the output fixture.');
+    }
+
+    expect(fn () => $terminal === 'output' ? $output->output() : $output->storeAs('', 'drawing', 'exports'))
+        ->toThrow(DwgOperationFailed::class, 'output_too_large')
+        ->and(fn () => $output->output())->toThrow(LogicException::class)
+        ->and(Storage::disk('exports')->allFiles())->toBe([]);
+})->with(['output', 'storeAs']);
+
+it('preserves terminal failures when workspace cleanup also fails', function (string $terminal, string $reason): void {
+    Log::shouldReceive('warning')->once()->with('DWG converter temporary cleanup failed.', [
+        'operation' => 'dxf', 'phase' => 'terminal', 'exception_class' => RuntimeException::class,
+    ]);
+    FailedCleanupStream::$exists = true;
+    FailedCleanupStream::$attempts = 0;
+    \stream_wrapper_register('cleanupfailure', FailedCleanupStream::class);
+    $workspace = (new ReflectionClass(Workspace::class))->newInstanceWithoutConstructor();
+    (new ReflectionProperty(Workspace::class, 'directory'))->setValue($workspace, 'cleanupfailure://workspace');
+    $output = new DwgOutput($workspace, $workspace->outputPath('output.dxf'), 'dxf', 'image/vnd.dxf', null, 'dxf');
+
+    try {
+        expect(fn () => $terminal === 'output' ? $output->output() : $output->storeAs('../invalid', 'drawing'))
+            ->toThrow(DwgOperationFailed::class, $reason)
+            ->and(FailedCleanupStream::$attempts)->toBe(1)
+            ->and(fn () => $output->output())->toThrow(LogicException::class);
+        unset($output);
+        expect(FailedCleanupStream::$attempts)->toBe(1);
+    } finally {
+        FailedCleanupStream::$exists = false;
+        \clearstatcache();
+        $workspace->cleanup();
+        \stream_wrapper_unregister('cleanupfailure');
+    }
+})->with(['read' => ['output', 'output_missing'], 'storage' => ['storeAs', 'storage_failed']]);
 
 it('streams an output to a named Laravel disk', function (): void {
     Storage::fake('drawings');
@@ -82,7 +181,7 @@ it('cleans an output abandoned before consumption', function (): void {
 
     $output = Dwg::toDxf(DwgBinary::from('AC1032 drawing'))->convert();
     unset($output);
-    gc_collect_cycles();
+    \gc_collect_cycles();
 
     expect(\scandir(config()->string('dwg-converter.temporary_directory')))->toBe(['.', '..']);
 });

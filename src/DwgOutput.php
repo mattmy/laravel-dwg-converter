@@ -42,7 +42,47 @@ final class DwgOutput
      */
     public function __destruct()
     {
-        $this->workspace->cleanup();
+        if ($this->state === self::READY) {
+            $this->workspace->cleanup($this->operation, 'destructor');
+        }
+    }
+
+    /**
+     * Reject a second cleanup owner without changing the original result.
+     *
+     * @throws LogicException
+     */
+    public function __clone(): void
+    {
+        $this->state = self::CONSUMED;
+
+        throw new LogicException('DWG outputs cannot be cloned.');
+    }
+
+    /**
+     * Prevent temporary resource ownership from being serialized.
+     *
+     * @return never
+     *
+     * @throws LogicException
+     */
+    public function __serialize(): array
+    {
+        throw new LogicException('DWG outputs cannot be serialized.');
+    }
+
+    /**
+     * Reject hydration without granting a partial result cleanup ownership.
+     *
+     * @param  array<array-key, mixed>  $data
+     *
+     * @throws LogicException
+     */
+    public function __unserialize(array $data): void
+    {
+        $this->state = self::CONSUMED;
+
+        throw new LogicException('DWG outputs cannot be unserialized.');
     }
 
     /**
@@ -62,7 +102,7 @@ final class DwgOutput
     }
 
     /**
-     * Read all output bytes and then remove the private artifact.
+     * Read all output bytes and then attempt private cleanup without throwing.
      *
      * @throws DwgOperationFailed
      * @throws LogicException
@@ -85,7 +125,7 @@ final class DwgOutput
     }
 
     /**
-     * Stream the output to a Laravel disk and then remove the private artifact.
+     * Stream to a Laravel disk and then attempt private cleanup without throwing.
      *
      * @throws DwgOperationFailed
      * @throws LogicException
@@ -133,6 +173,8 @@ final class DwgOutput
      */
     private function assertOutputFile(): void
     {
+        \clearstatcache(true, $this->path);
+
         if (! $this->workspace->owns($this->path) || ! \is_file($this->path) || ! \is_readable($this->path)) {
             throw new DwgOperationFailed('output_missing', ['operation' => $this->operation]);
         }
@@ -235,12 +277,12 @@ final class DwgOutput
     }
 
     /**
-     * Remove temporary resources after every terminal path.
+     * Attempt cleanup and finish consumption after every terminal path.
      */
     private function finishConsumption(): void
     {
         try {
-            $this->workspace->cleanup();
+            $this->workspace->cleanup($this->operation, 'terminal');
         } finally {
             $this->state = self::CONSUMED;
         }

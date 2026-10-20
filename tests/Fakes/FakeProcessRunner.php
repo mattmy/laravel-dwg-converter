@@ -21,7 +21,7 @@ final class FakeProcessRunner implements ProcessRunner
     public array $inputSnapshots = [];
 
     /**
-     * @param  Closure(list<string>, Workspace, float, ?int, string, ?string): void  $run
+     * @param  Closure(list<string>, Workspace, float, string): void  $run
      */
     public function __construct(
         private readonly Closure $run,
@@ -37,9 +37,7 @@ final class FakeProcessRunner implements ProcessRunner
             array $_command,
             Workspace $workspace,
             float $_timeout,
-            ?int $_maxOutputBytes,
             string $_operation,
-            ?string $_stdoutPath,
         ) use ($name, $contents): void {
             if (\file_put_contents($workspace->outputPath($name), $contents) === false) {
                 throw new \RuntimeException('Unable to write a fake process output.');
@@ -72,9 +70,7 @@ final class FakeProcessRunner implements ProcessRunner
         array $command,
         Workspace $workspace,
         float $timeout,
-        ?int $maxOutputBytes,
         string $operation,
-        ?string $stdoutPath = null,
         string $stage = 'convert',
     ): void {
         $this->commands[] = $command;
@@ -87,9 +83,7 @@ final class FakeProcessRunner implements ProcessRunner
             $command,
             $workspace,
             $timeout,
-            $maxOutputBytes,
             $operation,
-            $stdoutPath,
         );
     }
 }

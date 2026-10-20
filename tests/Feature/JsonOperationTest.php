@@ -75,6 +75,31 @@ it('rejects JSON output above its dedicated validation limit', function (): void
         ->toThrow(DwgOperationFailed::class, 'output_too_large');
 });
 
+it('preserves JSON just inside the native decoder depth boundary', function (): void {
+    $contents = \str_repeat('[', 511) . '0' . \str_repeat(']', 511);
+    app()->instance(ProcessRunner::class, FakeProcessRunner::writesFile('drawing.json', $contents));
+
+    expect(Dwg::toJson(DwgBinary::from('AC1032 drawing'))->convert()->output())->toBe($contents);
+});
+
+it('keeps the native depth exception when otherwise valid JSON exceeds its boundary', function (int $levels): void {
+    $contents = \str_repeat('[', $levels) . '0' . \str_repeat(']', $levels);
+    app()->instance(ProcessRunner::class, FakeProcessRunner::writesFile('drawing.json', $contents));
+
+    try {
+        Dwg::toJson(DwgBinary::from('AC1032 drawing'))->convert();
+    } catch (DwgOperationFailed $failure) {
+        $previous = $failure->getPrevious();
+        expect($failure->reason())->toBe('json_invalid')
+            ->and($previous)->toBeInstanceOf(JsonException::class)
+            ->and($previous?->getCode())->toBe(\JSON_ERROR_DEPTH);
+
+        return;
+    }
+
+    throw new RuntimeException('Expected the native JSON depth rejection.');
+})->with([[512], [513]]);
+
 it('rejects a non-integer JSON validation limit', function (): void {
     config()->set('dwg-converter.max_json_output_bytes', 'large');
 

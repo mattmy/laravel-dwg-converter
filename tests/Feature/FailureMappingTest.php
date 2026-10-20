@@ -10,6 +10,7 @@ use Mattmy\DwgConverter\Facades\Dwg;
 use Mattmy\DwgConverter\Internal\ProcessRunner;
 use Mattmy\DwgConverter\Internal\Workspace;
 use Mattmy\DwgConverter\Tests\Fakes\FakeProcessRunner;
+use Mattmy\DwgConverter\Tests\Fakes\ThumbnailFixture;
 
 it('maps invalid published configuration to an environment failure', function (
     string $key,
@@ -25,6 +26,7 @@ it('maps invalid published configuration to an environment failure', function (
     'input limit type' => ['max_input_bytes', 'large'],
     'output limit type' => ['max_output_bytes', 1.5],
     'temporary root' => ['temporary_directory', 'relative/path'],
+    'NUL temporary root' => ['temporary_directory', \sys_get_temp_dir() . "/dwg\0root"],
     'foreign absolute temporary root' => [
         'temporary_directory',
         \DIRECTORY_SEPARATOR === '\\' ? '/tmp/dwg-converter' : 'C:\\temp\\dwg-converter',
@@ -36,12 +38,48 @@ it('checks only the executable needed by the selected operation', function (): v
     config()->set('dwg-converter.executables.imagemagick', '');
     $runner = FakeProcessRunner::writesFile(
         'input.png',
-        "\x89PNG\r\n\x1a\n" . \str_repeat("\0", 12) . "IEND\xaeB`\x82",
+        ThumbnailFixture::png(),
     );
     app()->instance(ProcessRunner::class, $runner);
 
     expect(Dwg::thumbnail(DwgBinary::from('AC1032 drawing'))->extract()->output())
         ->toStartWith("\x89PNG");
+});
+
+it('rejects an existing file used as the temporary directory before running a tool', function (): void {
+    $path = \tempnam(\sys_get_temp_dir(), 'dwg-invalid-root-');
+    if ($path === false) {
+        throw new RuntimeException('Unable to create the configuration fixture.');
+    }
+    $runner = FakeProcessRunner::writesFile('output.dxf', 'unused');
+    app()->instance(ProcessRunner::class, $runner);
+    config()->set('dwg-converter.temporary_directory', $path);
+
+    try {
+        expect(fn () => Dwg::toDxf(DwgBinary::from('AC1032 drawing'))->convert())
+            ->toThrow(LibreDwgUnavailable::class, 'invalid_configuration')
+            ->and($runner->commands)->toBe([]);
+    } finally {
+        \unlink($path);
+    }
+});
+
+it('maps a temporary root beneath an existing file to an environment failure', function (): void {
+    $path = \tempnam(\sys_get_temp_dir(), 'dwg-root-parent-');
+    if ($path === false) {
+        throw new RuntimeException('Unable to create the configuration fixture.');
+    }
+    $runner = FakeProcessRunner::writesFile('output.dxf', 'unused');
+    app()->instance(ProcessRunner::class, $runner);
+    config()->set('dwg-converter.temporary_directory', $path . '/child');
+
+    try {
+        expect(fn () => Dwg::toDxf(DwgBinary::from('AC1032 drawing'))->convert())
+            ->toThrow(LibreDwgUnavailable::class, 'invalid_configuration')
+            ->and($runner->commands)->toBe([]);
+    } finally {
+        \unlink($path);
+    }
 });
 
 it('preserves an executable availability failure', function (): void {
@@ -51,9 +89,7 @@ it('preserves an executable availability failure', function (): void {
             array $_command,
             Workspace $_workspace,
             float $_timeout,
-            ?int $_maxOutputBytes,
             string $_operation,
-            ?string $_stdoutPath,
         ): void {},
         $failure,
     );
@@ -68,9 +104,7 @@ it('preserves a stable process failure', function (): void {
         array $_command,
         Workspace $_workspace,
         float $_timeout,
-        ?int $_maxOutputBytes,
         string $_operation,
-        ?string $_stdoutPath,
     ): void {
         throw new DwgOperationFailed('process_failed', [
             'operation' => 'thumbnail',

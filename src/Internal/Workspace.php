@@ -4,11 +4,15 @@ declare(strict_types=1);
 
 namespace Mattmy\DwgConverter\Internal;
 
+use ErrorException;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Log;
 use Mattmy\DwgConverter\DwgBinary;
 use Mattmy\DwgConverter\Exceptions\DwgOperationFailed;
 use Mattmy\DwgConverter\Exceptions\InvalidDwg;
 use Mattmy\DwgConverter\Exceptions\LibreDwgUnavailable;
+use RuntimeException;
+use Throwable;
 
 /**
  * Owns one isolated temporary DWG snapshot and its generated artifacts.
@@ -37,30 +41,44 @@ final class Workspace
         ?int $maxInputBytes,
         string $operation,
     ): self {
-        if (! self::isAbsolutePath($temporaryDirectory)) {
-            throw new LibreDwgUnavailable('invalid_configuration', ['operation' => $operation]);
-        }
-
-        if (! \is_dir($temporaryDirectory) && ! \mkdir($temporaryDirectory, 0700, true) && ! \is_dir($temporaryDirectory)) {
+        if (! self::isAbsolutePath($temporaryDirectory)
+            || \str_contains($temporaryDirectory, "\0")
+            || (\file_exists($temporaryDirectory) && ! \is_dir($temporaryDirectory))) {
             throw new LibreDwgUnavailable('invalid_configuration', ['operation' => $operation]);
         }
 
         try {
-            $directory = $temporaryDirectory . \DIRECTORY_SEPARATOR . \bin2hex(\random_bytes(16));
-        } catch (\Throwable $exception) {
+            if (! \is_dir($temporaryDirectory) && ! \mkdir($temporaryDirectory, 0700, true) && ! \is_dir($temporaryDirectory)) {
+                throw new LibreDwgUnavailable('invalid_configuration', ['operation' => $operation]);
+            }
+        } catch (ErrorException $exception) {
             throw new LibreDwgUnavailable('invalid_configuration', ['operation' => $operation], $exception);
         }
 
-        if (! \mkdir($directory, 0700)) {
-            throw new DwgOperationFailed('input_snapshot_failed', ['operation' => $operation]);
+        try {
+            $directory = $temporaryDirectory . \DIRECTORY_SEPARATOR . \bin2hex(\random_bytes(16));
+        } catch (Throwable $exception) {
+            throw new LibreDwgUnavailable('invalid_configuration', ['operation' => $operation], $exception);
+        }
+
+        try {
+            if (! \mkdir($directory, 0700)) {
+                throw new DwgOperationFailed('input_snapshot_failed', ['operation' => $operation]);
+            }
+        } catch (ErrorException $exception) {
+            throw new DwgOperationFailed('input_snapshot_failed', ['operation' => $operation], $exception);
         }
 
         $workspace = new self($directory);
 
         try {
             $workspace->snapshot($source, $maxInputBytes, $operation);
-        } catch (\Throwable $exception) {
-            $workspace->cleanup();
+        } catch (Throwable $exception) {
+            $workspace->cleanup($operation, 'snapshot');
+
+            if ($exception instanceof ErrorException) {
+                throw new DwgOperationFailed('input_snapshot_failed', ['operation' => $operation], $exception);
+            }
 
             throw $exception;
         }
@@ -106,53 +124,81 @@ final class Workspace
     }
 
     /**
-     * Delete only this package-owned workspace.
+     * Attempt private cleanup without interrupting the caller; warn on failure.
      */
-    public function cleanup(): void
+    public function cleanup(string $operation = 'unknown', string $phase = 'conversion'): void
     {
         if ($this->cleaned) {
             return;
         }
 
-        if (\is_link($this->directory)) {
-            \unlink($this->directory);
+        \set_error_handler(static function (int $severity): never {
+            throw new ErrorException('Temporary cleanup failed.', 0, $severity);
+        });
+
+        try {
+            if (\is_link($this->directory)) {
+                if (! \unlink($this->directory)) {
+                    throw new RuntimeException('Temporary cleanup failed.');
+                }
+            } elseif (\is_dir($this->directory)) {
+                $this->removeDirectory($this->directory);
+            }
+
             $this->cleaned = true;
-
-            return;
+        } catch (Throwable $exception) {
+            try {
+                Log::warning('DWG converter temporary cleanup failed.', [
+                    'operation' => $operation,
+                    'phase' => $phase,
+                    'exception_class' => \get_debug_type($exception),
+                ]);
+            } catch (Throwable) {
+                // Logging failure must not turn optional cleanup into a caller failure.
+            }
+        } finally {
+            \restore_error_handler();
         }
+    }
 
-        if (! \is_dir($this->directory)) {
-            $this->cleaned = true;
-
-            return;
-        }
-
-        $this->removeDirectory($this->directory);
-        $this->cleaned = true;
+    /**
+     * Determine whether a path is rooted on Windows or Unix.
+     */
+    public static function isAbsolutePath(string $path): bool
+    {
+        return \DIRECTORY_SEPARATOR === '\\'
+            ? \preg_match('/^[A-Za-z]:[\\\\\/]/', $path) === 1
+            : \str_starts_with($path, '/');
     }
 
     /**
      * Remove a package-owned directory without following symbolic links.
+     *
+     * @throws RuntimeException
      */
     private function removeDirectory(string $directory): void
     {
         $items = \scandir($directory);
-        if ($items !== false) {
-            foreach ($items as $item) {
-                if ($item === '.' || $item === '..') {
-                    continue;
-                }
+        if ($items === false) {
+            throw new RuntimeException('Temporary cleanup failed.');
+        }
 
-                $path = $directory . \DIRECTORY_SEPARATOR . $item;
-                if (\is_dir($path) && ! \is_link($path)) {
-                    $this->removeDirectory($path);
-                } else {
-                    \unlink($path);
-                }
+        foreach ($items as $item) {
+            if ($item === '.' || $item === '..') {
+                continue;
+            }
+
+            $path = $directory . \DIRECTORY_SEPARATOR . $item;
+            if (\is_dir($path) && ! \is_link($path)) {
+                $this->removeDirectory($path);
+            } elseif (! \unlink($path)) {
+                throw new RuntimeException('Temporary cleanup failed.');
             }
         }
 
-        \rmdir($directory);
+        if (! \rmdir($directory)) {
+            throw new RuntimeException('Temporary cleanup failed.');
+        }
     }
 
     /**
@@ -208,7 +254,7 @@ final class Workspace
             throw new InvalidDwg('input_not_absolute', ['operation' => $operation]);
         }
 
-        if (\str_contains($path, '://')) {
+        if (\str_contains($path, '://') || \str_contains($path, "\0")) {
             throw new InvalidDwg('input_not_readable', ['operation' => $operation]);
         }
 
@@ -237,18 +283,20 @@ final class Workspace
             throw new DwgOperationFailed('input_snapshot_failed', ['operation' => $operation]);
         }
 
-        $output = \fopen($this->inputPath(), 'xb');
-        if ($output === false) {
-            \fclose($input);
-
-            throw new DwgOperationFailed('input_snapshot_failed', ['operation' => $operation]);
-        }
+        $output = false;
 
         try {
+            $output = \fopen($this->inputPath(), 'xb');
+            if ($output === false) {
+                throw new DwgOperationFailed('input_snapshot_failed', ['operation' => $operation]);
+            }
+
             $this->copyStream($input, $output, $maxInputBytes, $operation);
         } finally {
             \fclose($input);
-            \fclose($output);
+            if (\is_resource($output)) {
+                \fclose($output);
+            }
         }
     }
 
@@ -264,7 +312,7 @@ final class Workspace
             throw new InvalidDwg('input_too_large', ['operation' => $operation]);
         }
 
-        if (\file_put_contents($this->inputPath(), $contents, \LOCK_EX) === false) {
+        if (\file_put_contents($this->inputPath(), $contents, \LOCK_EX) !== \strlen($contents)) {
             throw new DwgOperationFailed('input_snapshot_failed', ['operation' => $operation]);
         }
     }
@@ -296,15 +344,5 @@ final class Workspace
                 throw new DwgOperationFailed('input_snapshot_failed', ['operation' => $operation]);
             }
         }
-    }
-
-    /**
-     * Determine whether a path is rooted on Windows or Unix.
-     */
-    public static function isAbsolutePath(string $path): bool
-    {
-        return \DIRECTORY_SEPARATOR === '\\'
-            ? \preg_match('/^[A-Za-z]:[\\\\\/]/', $path) === 1
-            : \str_starts_with($path, '/');
     }
 }

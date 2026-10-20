@@ -88,9 +88,7 @@ function successfulImageRunner(): FakeProcessRunner
         array $command,
         Workspace $workspace,
         float $_timeout,
-        ?int $_maxOutputBytes,
         string $_operation,
-        ?string $_stdoutPath,
     ): void {
         if ($command[0] === 'dwg2dxf') {
             \file_put_contents($workspace->outputPath('drawing.dxf'), "0\nSECTION\n2\nENTITIES\n0\nENDSEC\n0\nEOF\n");
@@ -239,22 +237,23 @@ it('rejects an image preview with unsafe dimensions', function (): void {
         ->and($runner->commands)->toHaveCount(2);
 });
 
-it('rejects malformed final images', function (ImageFormat $format): void {
-    $runner = new FakeProcessRunner(static function (array $command, Workspace $workspace): void {
+it('rejects malformed final images', function (ImageFormat $format, string $contents): void {
+    $runner = new FakeProcessRunner(static function (array $command, Workspace $workspace) use ($contents): void {
         if ($command[0] === 'dwg2dxf') {
             \file_put_contents($workspace->outputPath('drawing.dxf'), "0\nSECTION\n2\nENTITIES\n0\nENDSEC\n0\nEOF\n");
         } elseif ($command[0] === 'soffice') {
             $format = libreOfficeImageFormat($command);
             \file_put_contents($workspace->outputPath('drawing.' . $format->value), imageFixture($format));
         } elseif ($command[0] === 'magick') {
-            \file_put_contents(lastCommandArgument($command), 'not an image');
+            \file_put_contents(lastCommandArgument($command), $contents);
         }
     });
     app()->instance(ProcessRunner::class, $runner);
 
     expect(fn () => Dwg::toImage(DwgBinary::from('AC1032 drawing'))->format($format)->convert())
         ->toThrow(DwgOperationFailed::class, 'image_invalid');
-})->with(\array_map(static fn (ImageFormat $format): array => [$format], ImageFormat::cases()));
+})->with(\array_map(static fn (ImageFormat $format): array => [$format], ImageFormat::cases()))
+    ->with(['invalid signature' => ['not an image'], 'truncated header' => ['R']]);
 
 it('uses a random stem for binary sources when no storage name is provided', function (): void {
     Storage::fake('exports');

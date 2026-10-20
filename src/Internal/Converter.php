@@ -55,7 +55,6 @@ final class Converter
                 [$executable, $workspace->inputPath()],
                 $workspace,
                 $configuration['timeout'],
-                $configuration['max_output_bytes'],
                 $operation,
             );
 
@@ -64,7 +63,7 @@ final class Converter
 
             return new DwgOutput($workspace, $thumbnail, $extension, $mimeType, $configuration['max_output_bytes'], $operation, $sourceStem);
         } catch (\Throwable $exception) {
-            $workspace->cleanup();
+            $workspace->cleanup($operation, 'conversion');
 
             throw $exception;
         }
@@ -100,7 +99,6 @@ final class Converter
                 $command,
                 $workspace,
                 $configuration['timeout'],
-                $configuration['max_output_bytes'],
                 $operation,
             );
             $this->assertBoundedFile($output, $workspace, $operation, $configuration['max_output_bytes']);
@@ -108,7 +106,7 @@ final class Converter
 
             return new DwgOutput($workspace, $output, 'dxf', 'image/vnd.dxf', $configuration['max_output_bytes'], $operation, $sourceStem);
         } catch (\Throwable $exception) {
-            $workspace->cleanup();
+            $workspace->cleanup($operation, 'conversion');
 
             throw $exception;
         }
@@ -136,9 +134,7 @@ final class Converter
                 [$executable, '-O', 'JSON', '-o', $output, $workspace->inputPath()],
                 $workspace,
                 $configuration['timeout'],
-                $configuration['effective_output_limit'],
                 $operation,
-                null,
                 'dwgread',
             );
             $this->assertJson($output, $workspace, $configuration['effective_output_limit']);
@@ -153,7 +149,7 @@ final class Converter
                 $sourceStem,
             );
         } catch (\Throwable $exception) {
-            $workspace->cleanup();
+            $workspace->cleanup($operation, 'conversion');
 
             throw $exception;
         }
@@ -201,9 +197,7 @@ final class Converter
                 $dxfCommand,
                 $workspace,
                 $dxfConfiguration['timeout'],
-                $dxfConfiguration['max_output_bytes'],
                 $operation,
-                null,
                 'dwg2dxf',
             );
             $this->assertBoundedFile($dxf, $workspace, $operation, $dxfConfiguration['max_output_bytes']);
@@ -227,9 +221,7 @@ final class Converter
                 ],
                 $workspace,
                 $libreOfficeConfiguration['timeout'],
-                $libreOfficeConfiguration['max_output_bytes'],
                 $operation,
-                null,
                 'libreoffice',
             );
             $this->assertImage($intermediateImage, $format, $workspace, $operation, $libreOfficeConfiguration['max_output_bytes']);
@@ -251,9 +243,7 @@ final class Converter
                 $command,
                 $workspace,
                 $imageMagickConfiguration['timeout'],
-                $imageMagickConfiguration['max_output_bytes'],
                 $operation,
-                null,
                 'imagemagick',
             );
             $this->assertImage($output, $format, $workspace, $operation, $imageMagickConfiguration['max_output_bytes']);
@@ -268,7 +258,7 @@ final class Converter
                 $sourceStem,
             );
         } catch (\Throwable $exception) {
-            $workspace->cleanup();
+            $workspace->cleanup($operation, 'conversion');
 
             throw $exception;
         }
@@ -281,6 +271,7 @@ final class Converter
      *
      * @throws DwgOperationFailed
      * @throws InvalidDwg
+     * @throws LibreDwgUnavailable
      */
     private function workspace(
         UploadedFile|string|DwgBinary $source,
@@ -350,7 +341,7 @@ final class Converter
     /**
      * Normalize the JSON-specific limit and derive its effective output limit.
      *
-     * @return array{executable: string, timeout: float, max_input_bytes: ?int, max_output_bytes: ?int, max_json_output_bytes: ?int, effective_output_limit: ?int, temporary_directory: string}
+     * @return array{executable: string, timeout: float, max_input_bytes: ?int, max_output_bytes: ?int, effective_output_limit: ?int, temporary_directory: string}
      *
      * @throws LibreDwgUnavailable
      */
@@ -361,7 +352,6 @@ final class Converter
 
         return [
             ...$configuration,
-            'max_json_output_bytes' => $maxJsonOutputBytes,
             'effective_output_limit' => $this->effectiveOutputLimit(
                 $configuration['max_output_bytes'],
                 $maxJsonOutputBytes,
@@ -431,7 +421,7 @@ final class Converter
     }
 
     /**
-     * Identify a thumbnail through its file signature.
+     * Identify a thumbnail and validate its bounded container structure.
      *
      * @return array{string, string}
      *
@@ -447,12 +437,243 @@ final class Converter
         }
 
         return match (true) {
-            \str_starts_with($header, 'BM') && $size >= 54 => ['bmp', 'image/bmp'],
-            $header === "\x89PNG\r\n\x1a\n" && $size >= 28 && $this->hasPngEnd($path, $size) => ['png', 'image/png'],
-            \str_starts_with($header, "\xd7\xcd\xc6\x9a") && $size >= 40 => ['wmf', 'image/wmf'],
-            \str_starts_with($header, "\x01\x00\x09\x00") && $size >= 18 => ['wmf', 'image/wmf'],
+            \str_starts_with($header, 'BM') && $this->isBmpThumbnail($path, $size) => ['bmp', 'image/bmp'],
+            $header === "\x89PNG\r\n\x1a\n" && $this->isPngThumbnail($path, $size) => ['png', 'image/png'],
+            (\str_starts_with($header, "\xd7\xcd\xc6\x9a")
+                || \str_starts_with($header, "\x01\x00\x09\x00")
+                || \str_starts_with($header, "\x02\x00\x09\x00"))
+                && $this->isWmfThumbnail($path, $size) => ['wmf', 'image/wmf'],
             default => throw new DwgOperationFailed('thumbnail_invalid', ['operation' => 'thumbnail']),
         };
+    }
+
+    /** Check BMP headers, palette/mask space and pixel-data bounds without decoding. */
+    private function isBmpThumbnail(string $path, int $size): bool
+    {
+        if ($size < 26) {
+            return false;
+        }
+
+        $header = \file_get_contents($path, false, null, 0, \min($size, 54));
+        if (! \is_string($header) || \strlen($header) < 26) {
+            return false;
+        }
+        $file = $this->unpackIntegers('Vsize/vreserved1/vreserved2/Voffset/Vdib', \substr($header, 2, 16));
+        $offset = $file['offset'] ?? 0;
+        $dib = $file['dib'] ?? 0;
+        if (($file['size'] ?? 0) !== $size || ($file['reserved1'] ?? -1) !== 0
+            || ($file['reserved2'] ?? -1) !== 0 || $offset < 14 + $dib || $offset >= $size) {
+            return false;
+        }
+
+        if ($dib === 12) {
+            $info = $this->unpackIntegers('vwidth/vheight/vplanes/vbits', \substr($header, 18, 8));
+            $width = $info['width'] ?? 0;
+            $height = $info['height'] ?? 0;
+            $compression = 0;
+            $imageBytes = 0;
+            $colors = 0;
+        } elseif ($dib >= 40 && \strlen($header) >= 54) {
+            $info = $this->unpackIntegers('Vwidth/Vheight/vplanes/vbits/Vcompression/VimageBytes/Vx/Vy/Vcolors', \substr($header, 18, 32));
+            $width = $info['width'] ?? 0;
+            $height = $info['height'] ?? 0;
+            if ($width > 0x7FFFFFFF) {
+                return false;
+            }
+            $height = $height > 0x7FFFFFFF ? $height - 0x100000000 : $height;
+            $compression = $info['compression'] ?? -1;
+            $imageBytes = $info['imageBytes'] ?? 0;
+            $colors = $info['colors'] ?? 0;
+        } else {
+            return false;
+        }
+
+        $bits = $info['bits'] ?? 0;
+        if ($width < 1 || $height === 0 || ($info['planes'] ?? 0) !== 1) {
+            return false;
+        }
+        $validEncoding = match ($compression) {
+            0 => \in_array($bits, [1, 4, 8, 16, 24, 32], true),
+            1 => $bits === 8 && $height > 0,
+            2 => $bits === 4 && $height > 0,
+            3, 6 => \in_array($bits, [16, 32], true),
+            4, 5 => $bits === 0 && $height > 0,
+            default => false,
+        };
+        if (! $validEncoding || ($dib === 12 && ! \in_array($bits, [1, 4, 8, 24], true))) {
+            return false;
+        }
+
+        if ($bits > 0 && $bits <= 8) {
+            if ($colors > 1 << $bits) {
+                return false;
+            }
+            $colors = $colors === 0 ? 1 << $bits : $colors;
+        }
+        $maskBytes = \in_array($compression, [3, 6], true) ? ($compression === 6 ? 16 : 12) : 0;
+        $minimumOffset = 14 + \max($dib, 40 + $maskBytes) + $colors * 4;
+        if ($dib === 12) {
+            $minimumOffset = 26 + $colors * 3;
+        }
+        $available = $size - $offset;
+        if ($offset < $minimumOffset || $imageBytes > $available) {
+            return false;
+        }
+        if (\in_array($compression, [0, 3, 6], true)) {
+            $stride = \intdiv($width * $bits + 31, 32) * 4;
+
+            return \abs($height) <= \intdiv($available, $stride)
+                && ($imageBytes === 0 || \abs($height) <= \intdiv($imageBytes, $stride));
+        }
+
+        return $imageBytes > 0;
+    }
+
+    /** Walk PNG chunk boundaries and required headers without decompressing image data. */
+    private function isPngThumbnail(string $path, int $size): bool
+    {
+        $offset = self::PNG_SIGNATURE_BYTES;
+        $hasHeader = false;
+        $hasData = false;
+        $dataEnded = false;
+        $hasPalette = false;
+        $color = -1;
+        $depth = 0;
+        while ($offset <= $size - 12) {
+            $chunk = \file_get_contents($path, false, null, $offset, 8);
+            if (! \is_string($chunk) || \strlen($chunk) !== 8) {
+                return false;
+            }
+            $length = $this->unpackIntegers('Nlength', $chunk)['length'] ?? -1;
+            $type = \substr($chunk, 4, 4);
+            if ($length < 0 || $length > 0x7FFFFFFF || $length > $size - $offset - 12
+                || \preg_match('/^[A-Za-z]{4}$/', $type) !== 1) {
+                return false;
+            }
+            if (! $hasHeader) {
+                if ($type !== 'IHDR' || $length !== 13) {
+                    return false;
+                }
+                $data = \file_get_contents($path, false, null, $offset + 8, 13);
+                if (! \is_string($data) || \strlen($data) !== 13) {
+                    return false;
+                }
+                $info = $this->unpackIntegers('Nwidth/Nheight/Cdepth/Ccolor/Ccompression/Cfilter/Cinterlace', $data);
+                $color = $info['color'] ?? -1;
+                $depth = $info['depth'] ?? 0;
+                $width = $info['width'] ?? 0;
+                $height = $info['height'] ?? 0;
+                $depths = match ($color) {
+                    0 => [1, 2, 4, 8, 16],
+                    2, 4, 6 => [8, 16],
+                    3 => [1, 2, 4, 8],
+                    default => [],
+                };
+                if ($width < 1 || $width > 0x7FFFFFFF || $height < 1 || $height > 0x7FFFFFFF
+                    || ! \in_array($depth, $depths, true) || ($info['compression'] ?? -1) !== 0
+                    || ($info['filter'] ?? -1) !== 0 || ! \in_array($info['interlace'] ?? -1, [0, 1], true)) {
+                    return false;
+                }
+                $hasHeader = true;
+            } elseif ($type === 'IHDR') {
+                return false;
+            } elseif ($type === 'PLTE') {
+                if ($hasPalette || $hasData || \in_array($color, [0, 4], true)
+                    || $length < 3 || $length > 768 || $length % 3 !== 0
+                    || ($color === 3 && \intdiv($length, 3) > 1 << $depth)) {
+                    return false;
+                }
+                $hasPalette = true;
+            } elseif ($type === 'IDAT') {
+                if ($dataEnded || ($color === 3 && ! $hasPalette)) {
+                    return false;
+                }
+                $hasData = true;
+            } elseif ($type === 'IEND') {
+                return $length === 0 && $hasData && $offset + 12 === $size && $this->hasPngEnd($path, $size);
+            } elseif ($hasData) {
+                $dataEnded = true;
+            }
+            $offset += $length + 12;
+        }
+
+        return false;
+    }
+
+    /** Check standard/placeable WMF headers, record bounds and terminal EOF without rendering. */
+    private function isWmfThumbnail(string $path, int $size): bool
+    {
+        if ($size < 24) {
+            return false;
+        }
+        $header = \file_get_contents($path, false, null, 0, \min($size, 40));
+        if (! \is_string($header)) {
+            return false;
+        }
+        $start = \str_starts_with($header, "\xd7\xcd\xc6\x9a") ? 22 : 0;
+        if ($size < $start + 24 || \strlen($header) < $start + 18) {
+            return false;
+        }
+        if ($start === 22) {
+            $words = $this->unpackIntegers('v11', \substr($header, 0, 22));
+            $checksum = 0;
+            foreach ($words as $word) {
+                $checksum ^= $word;
+            }
+            if ($checksum !== 0 || ($words[8] ?? 0) === 0 || ($words[9] ?? -1) !== 0 || ($words[10] ?? -1) !== 0) {
+                return false;
+            }
+        }
+        $info = $this->unpackIntegers('vtype/vheader/vversion/Vsize/vobjects/Vmax/vmembers', \substr($header, $start, 18));
+        if (! \in_array($info['type'] ?? 0, [1, 2], true) || ($info['header'] ?? 0) !== 9
+            || ! \in_array($info['version'] ?? 0, [0x0100, 0x0300], true)
+            || ($info['size'] ?? 0) * 2 !== $size - $start) {
+            return false;
+        }
+        $offset = $start + 18;
+        $maximum = 0;
+        while ($offset <= $size - 6) {
+            $record = \file_get_contents($path, false, null, $offset, 6);
+            if (! \is_string($record) || \strlen($record) !== 6) {
+                return false;
+            }
+            $fields = $this->unpackIntegers('Vwords/vfunction', $record);
+            $words = $fields['words'] ?? 0;
+            if ($words < 3 || $words > \intdiv($size - $offset, 2)) {
+                return false;
+            }
+            $maximum = \max($maximum, $words);
+            $offset += $words * 2;
+            if (($fields['function'] ?? -1) === 0) {
+                return $words === 3 && $offset === $size && ($info['max'] ?? 0) === $maximum;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Narrow unsigned binary header fields at the native unpack boundary.
+     *
+     * @return array<array-key, int>
+     *
+     * @throws DwgOperationFailed
+     */
+    private function unpackIntegers(string $format, string $bytes): array
+    {
+        $values = \unpack($format, $bytes);
+        if ($values === false) {
+            throw new DwgOperationFailed('thumbnail_invalid', ['operation' => 'thumbnail']);
+        }
+        $integers = [];
+        foreach ($values as $key => $value) {
+            if (! \is_int($value)) {
+                throw new DwgOperationFailed('thumbnail_invalid', ['operation' => 'thumbnail']);
+            }
+            $integers[$key] = $value;
+        }
+
+        return $integers;
     }
 
     /**
@@ -607,12 +828,15 @@ final class Converter
      */
     private function isWebp(string $path, int $size): bool
     {
+        if ($size < 20) {
+            return false;
+        }
+
         $header = \file_get_contents($path, false, null, 0, 12);
         $riff = \is_string($header) ? \unpack('Vsize', \substr($header, 4, 4)) : false;
         $riffSize = $riff['size'] ?? null;
 
-        return $size >= 20
-            && \is_string($header)
+        return \is_string($header)
             && \substr($header, 0, 4) === 'RIFF'
             && \substr($header, 8, 4) === 'WEBP'
             && \is_int($riffSize)

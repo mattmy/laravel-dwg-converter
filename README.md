@@ -2,8 +2,9 @@
 
 [繁體中文](README.zh-TW.md)
 
-Laravel DWG Converter lets Laravel applications extract embedded thumbnails from DWG files and
-convert DWG files to DXF, structural JSON, PNG, JPEG, or WebP.
+Laravel DWG Converter integrates LibreDWG command-line tools into Laravel applications
+to extract embedded DWG thumbnails and convert DWG files to DXF or structural JSON. Creating PNG,
+JPEG, or WebP previews also requires LibreOffice and ImageMagick.
 
 ## Features
 
@@ -96,10 +97,15 @@ Every operation accepts a valid `UploadedFile`, a local absolute path, or bytes 
 Each successful operation returns a one-time `DwgOutput`:
 
 - `extension()` and `mimeType()` inspect trusted output metadata without consuming it.
-- `storeAs()` streams the artifact to Laravel Storage and cleans up temporary resources.
+- `storeAs()` streams the artifact to Laravel Storage and then attempts temporary cleanup.
+- `DwgOutput` cannot be cloned, serialized, or unserialized; these attempts throw `LogicException`.
 - `output()` returns all bytes as a string and should only be used for outputs that safely fit in PHP memory.
 
 ## Errors and operational limits
+
+Temporary cleanup failures emit a sanitized `warning` through Laravel's default logger without
+interrupting conversion or delivery. Temporary files may remain; consumed results do not retry cleanup.
+Logger failures also leave the operation's result or original exception unchanged.
 
 Failures use `LibreDwgUnavailable`, `InvalidDwg`, or `DwgOperationFailed`. Each exception provides a stable
 `reason()` and sanitized scalar `context()`.

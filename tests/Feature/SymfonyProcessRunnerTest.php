@@ -113,7 +113,6 @@ it('maps a LibreDWG decode failure to invalid input', function (): void {
             [\PHP_BINARY, '-r', 'fwrite(STDERR, "ERROR: Failed to decode file\nREAD ERROR 0x800\n"); exit(1);'],
             $workspace,
             5.0,
-            1024,
             'dxf',
         ))->toThrow(InvalidDwg::class, 'libredwg_rejected_input');
     } finally {
@@ -134,13 +133,37 @@ it('maps a LibreDWG read failure to invalid input', function (): void {
             [\PHP_BINARY, '-r', 'fwrite(STDERR, "Unable to read file input.dwg. ERROR 0x800"); exit(1);'],
             $workspace,
             5.0,
-            1024,
             'thumbnail',
         ))->toThrow(InvalidDwg::class, 'libredwg_rejected_input');
     } finally {
         $workspace->cleanup();
     }
 });
+
+it('classifies image stage read failures according to the tool reading the input', function (string $stage, string $exception, string $reason): void {
+    $workspace = Workspace::fromSource(
+        DwgBinary::from('AC1032 drawing'),
+        config()->string('dwg-converter.temporary_directory'),
+        1024,
+        'image',
+    );
+
+    try {
+        expect(fn () => (new SymfonyProcessRunner())->run(
+            [\PHP_BINARY, '-r', 'fwrite(STDERR, "Unable to read file intermediate"); exit(1);'],
+            $workspace,
+            5.0,
+            'image',
+            $stage,
+        ))->toThrow($exception, $reason);
+    } finally {
+        $workspace->cleanup();
+    }
+})->with([
+    'DWG decoder' => ['dwg2dxf', InvalidDwg::class, 'libredwg_rejected_input'],
+    'LibreOffice DXF reader' => ['libreoffice', DwgOperationFailed::class, 'process_failed'],
+    'ImageMagick image reader' => ['imagemagick', DwgOperationFailed::class, 'process_failed'],
+]);
 
 it('allows a recoverable diagnostic when the process succeeds', function (): void {
     $workspace = Workspace::fromSource(
@@ -155,7 +178,6 @@ it('allows a recoverable diagnostic when the process succeeds', function (): voi
             [\PHP_BINARY, '-r', 'fwrite(STDERR, "warning: unsupported object");'],
             $workspace,
             5.0,
-            1024,
             'dxf',
         );
 
@@ -180,58 +202,8 @@ it('maps process timeout without leaving a workspace', function (): void {
             [\PHP_BINARY, '-r', 'usleep(500000);'],
             $workspace,
             0.05,
-            1024,
             'png',
         ))->toThrow(DwgOperationFailed::class, 'process_timed_out');
-    } finally {
-        $workspace->cleanup();
-    }
-});
-
-it('stops stdout that exceeds the configured limit', function (): void {
-    $workspace = Workspace::fromSource(
-        DwgBinary::from('AC1032 drawing'),
-        config()->string('dwg-converter.temporary_directory'),
-        1024,
-        'png',
-    );
-
-    try {
-        $runner = new SymfonyProcessRunner();
-
-        expect(fn () => $runner->run(
-            [\PHP_BINARY, '-r', 'echo str_repeat("x", 1024);'],
-            $workspace,
-            5.0,
-            16,
-            'png',
-            $workspace->outputPath('output.png'),
-        ))->toThrow(DwgOperationFailed::class, 'output_too_large');
-    } finally {
-        $workspace->cleanup();
-    }
-});
-
-it('allows stdout of any size when its limit is disabled', function (): void {
-    $workspace = Workspace::fromSource(
-        DwgBinary::from('AC1032 drawing'),
-        config()->string('dwg-converter.temporary_directory'),
-        null,
-        'png',
-    );
-
-    try {
-        $output = $workspace->outputPath('output.png');
-        (new SymfonyProcessRunner())->run(
-            [\PHP_BINARY, '-r', 'echo str_repeat("x", 1024);'],
-            $workspace,
-            5.0,
-            null,
-            'png',
-            $output,
-        );
-
-        expect(\filesize($output))->toBe(1024);
     } finally {
         $workspace->cleanup();
     }
@@ -252,7 +224,6 @@ it('redacts paths from a generic process failure', function (): void {
             [\PHP_BINARY, '-r', 'fwrite(STDERR, "failed C:\\\\private\\\\drawing.dwg"); exit(7);'],
             $workspace,
             5.0,
-            1024,
             'thumbnail',
         );
     } catch (DwgOperationFailed $failure) {

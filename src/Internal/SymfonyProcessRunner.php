@@ -95,7 +95,7 @@ final class SymfonyProcessRunner implements ProcessRunner
     }
 
     /**
-     * Execute argv and optionally stream stdout into a private file.
+     * Execute argv while retaining only the operation's diagnostic output.
      *
      * @param  list<string>  $command
      *
@@ -106,60 +106,23 @@ final class SymfonyProcessRunner implements ProcessRunner
         array $command,
         Workspace $workspace,
         float $timeout,
-        ?int $maxOutputBytes,
         string $operation,
-        ?string $stdoutPath = null,
         string $stage = 'convert',
     ): void {
         $stderr = '';
-        $tooLarge = false;
-        $stream = null;
-        if ($stdoutPath !== null) {
-            $stream = \fopen($stdoutPath, 'xb');
-            if ($stream === false) {
-                throw new DwgOperationFailed('output_missing', $this->context($operation, $stage));
-            }
-        }
 
         try {
             $process = new Process($command, $workspace->directory());
             $process->setTimeout($timeout);
-            $process->run(function (string $type, string $buffer) use (&$stderr, &$tooLarge, $stream, $maxOutputBytes, &$process): void {
+            $process->run(function (string $type, string $buffer) use (&$stderr): void {
                 if ($type === Process::ERR) {
                     $stderr = \substr($stderr . $buffer, 0, self::STDERR_LIMIT);
-
-                    return;
-                }
-
-                if ($stream === null || $tooLarge) {
-                    return;
-                }
-
-                if (\fwrite($stream, $buffer) !== \strlen($buffer)) {
-                    $tooLarge = true;
-                    $process->stop();
-
-                    return;
-                }
-
-                $position = \ftell($stream);
-                if ($position === false || ($maxOutputBytes !== null && $position > $maxOutputBytes)) {
-                    $tooLarge = true;
-                    $process->stop();
                 }
             });
         } catch (ProcessTimedOutException $exception) {
             throw new DwgOperationFailed('process_timed_out', $this->context($operation, $stage), $exception);
         } catch (\Throwable $exception) {
             throw new DwgOperationFailed('process_failed', $this->context($operation, $stage), $exception);
-        } finally {
-            if (\is_resource($stream)) {
-                \fclose($stream);
-            }
-        }
-
-        if ($tooLarge) {
-            throw new DwgOperationFailed('output_too_large', $this->context($operation, $stage));
         }
 
         if (! $process->isSuccessful()) {
@@ -168,7 +131,7 @@ final class SymfonyProcessRunner implements ProcessRunner
                 'exit_code' => $process->getExitCode(),
                 'stderr' => $this->summary($stderr),
             ];
-            if ($this->isRejectedInput($stderr)) {
+            if (($operation !== 'image' || $stage === 'dwg2dxf') && $this->isRejectedInput($stderr)) {
                 throw new InvalidDwg('libredwg_rejected_input', $context);
             }
 
