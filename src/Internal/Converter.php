@@ -607,12 +607,15 @@ final class Converter
      */
     private function isWebp(string $path, int $size): bool
     {
+        if ($size < 20) {
+            return false;
+        }
+
         $header = \file_get_contents($path, false, null, 0, 12);
         $riff = \is_string($header) ? \unpack('Vsize', \substr($header, 4, 4)) : false;
         $riffSize = $riff['size'] ?? null;
 
-        return $size >= 20
-            && \is_string($header)
+        return \is_string($header)
             && \substr($header, 0, 4) === 'RIFF'
             && \substr($header, 8, 4) === 'WEBP'
             && \is_int($riffSize)
