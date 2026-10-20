@@ -48,6 +48,44 @@ final class DwgOutput
     }
 
     /**
+     * Reject a second cleanup owner without changing the original result.
+     *
+     * @throws LogicException
+     */
+    public function __clone(): void
+    {
+        $this->state = self::CONSUMED;
+
+        throw new LogicException('DWG outputs cannot be cloned.');
+    }
+
+    /**
+     * Prevent temporary resource ownership from being serialized.
+     *
+     * @return never
+     *
+     * @throws LogicException
+     */
+    public function __serialize(): array
+    {
+        throw new LogicException('DWG outputs cannot be serialized.');
+    }
+
+    /**
+     * Reject hydration without granting a partial result cleanup ownership.
+     *
+     * @param  array<array-key, mixed>  $data
+     *
+     * @throws LogicException
+     */
+    public function __unserialize(array $data): void
+    {
+        $this->state = self::CONSUMED;
+
+        throw new LogicException('DWG outputs cannot be unserialized.');
+    }
+
+    /**
      * Return the trusted filename extension without consuming the output.
      */
     public function extension(): string

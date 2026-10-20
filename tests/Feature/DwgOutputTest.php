@@ -25,6 +25,53 @@ it('allows exactly one terminal consumption', function (): void {
         ->and(fn () => $output->output())->toThrow(LogicException::class);
 });
 
+it('rejects copying a result without changing its original lifecycle', function (string $method, bool $consumed): void {
+    $contents = "0\nSECTION\n2\nENTITIES\n0\nENDSEC\n0\nEOF\n";
+    app()->instance(ProcessRunner::class, FakeProcessRunner::writesFile('output.dxf', $contents));
+    $output = Dwg::toDxf(DwgBinary::from('AC1032 drawing'))->convert();
+    if ($consumed) {
+        expect($output->output())->toBe($contents);
+    }
+
+    expect(fn () => $method === 'clone' ? clone $output : \serialize($output))
+        ->toThrow(LogicException::class);
+    \gc_collect_cycles();
+    expect($output->extension())->toBe('dxf')->and($output->mimeType())->toBe('image/vnd.dxf');
+    if (! $consumed) {
+        expect($output->output())->toBe($contents);
+    }
+    expect(fn () => $output->output())->toThrow(LogicException::class);
+})->with(['clone', 'serialize'])->with([[false], [true]]);
+
+it('rejects direct result hydration without cleaning the original workspace', function (bool $consumed): void {
+    $workspace = Workspace::fromSource(DwgBinary::from('AC1032 drawing'), config()->string('dwg-converter.temporary_directory'), 1024, 'dxf');
+    $path = $workspace->outputPath('output.dxf');
+    \file_put_contents($path, 'artifact');
+    $output = new DwgOutput($workspace, $path, 'dxf', 'image/vnd.dxf', 1024, 'dxf');
+    if ($consumed) {
+        expect($output->output())->toBe('artifact');
+    }
+
+    $class = DwgOutput::class;
+    $payload = 'O:' . \strlen($class) . ':"' . $class . '":2:{'
+        . \serialize("\0{$class}\0workspace") . \serialize($workspace)
+        . \serialize("\0{$class}\0state") . \serialize('ready') . '}';
+
+    expect(fn () => \unserialize($payload))->toThrow(LogicException::class);
+    \gc_collect_cycles();
+    if (! $consumed) {
+        expect($output->output())->toBe('artifact');
+    }
+    expect(fn () => $output->output())->toThrow(LogicException::class);
+})->with([[false], [true]]);
+
+it('rejects an empty serialized result without a destructor error', function (): void {
+    $class = DwgOutput::class;
+
+    expect(fn () => \unserialize('O:' . \strlen($class) . ':"' . $class . '":0:{}'))
+        ->toThrow(LogicException::class);
+});
+
 it('rechecks the current artifact size before terminal consumption', function (string $terminal): void {
     Storage::fake('exports');
     $workspace = Workspace::fromSource(
