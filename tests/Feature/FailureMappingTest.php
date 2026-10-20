@@ -62,6 +62,24 @@ it('rejects an existing file used as the temporary directory before running a to
     }
 });
 
+it('maps a temporary root beneath an existing file to an environment failure', function (): void {
+    $path = \tempnam(\sys_get_temp_dir(), 'dwg-root-parent-');
+    if ($path === false) {
+        throw new RuntimeException('Unable to create the configuration fixture.');
+    }
+    $runner = FakeProcessRunner::writesFile('output.dxf', 'unused');
+    app()->instance(ProcessRunner::class, $runner);
+    config()->set('dwg-converter.temporary_directory', $path . '/child');
+
+    try {
+        expect(fn () => Dwg::toDxf(DwgBinary::from('AC1032 drawing'))->convert())
+            ->toThrow(LibreDwgUnavailable::class, 'invalid_configuration')
+            ->and($runner->commands)->toBe([]);
+    } finally {
+        \unlink($path);
+    }
+});
+
 it('preserves an executable availability failure', function (): void {
     $failure = new LibreDwgUnavailable('executable_not_found', ['operation' => 'thumbnail']);
     $runner = new FakeProcessRunner(

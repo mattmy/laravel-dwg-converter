@@ -46,8 +46,12 @@ final class Workspace
             throw new LibreDwgUnavailable('invalid_configuration', ['operation' => $operation]);
         }
 
-        if (! \is_dir($temporaryDirectory) && ! \mkdir($temporaryDirectory, 0700, true) && ! \is_dir($temporaryDirectory)) {
-            throw new LibreDwgUnavailable('invalid_configuration', ['operation' => $operation]);
+        try {
+            if (! \is_dir($temporaryDirectory) && ! \mkdir($temporaryDirectory, 0700, true) && ! \is_dir($temporaryDirectory)) {
+                throw new LibreDwgUnavailable('invalid_configuration', ['operation' => $operation]);
+            }
+        } catch (ErrorException $exception) {
+            throw new LibreDwgUnavailable('invalid_configuration', ['operation' => $operation], $exception);
         }
 
         try {
@@ -56,8 +60,12 @@ final class Workspace
             throw new LibreDwgUnavailable('invalid_configuration', ['operation' => $operation], $exception);
         }
 
-        if (! \mkdir($directory, 0700)) {
-            throw new DwgOperationFailed('input_snapshot_failed', ['operation' => $operation]);
+        try {
+            if (! \mkdir($directory, 0700)) {
+                throw new DwgOperationFailed('input_snapshot_failed', ['operation' => $operation]);
+            }
+        } catch (ErrorException $exception) {
+            throw new DwgOperationFailed('input_snapshot_failed', ['operation' => $operation], $exception);
         }
 
         $workspace = new self($directory);
@@ -66,6 +74,10 @@ final class Workspace
             $workspace->snapshot($source, $maxInputBytes, $operation);
         } catch (Throwable $exception) {
             $workspace->cleanup($operation, 'snapshot');
+
+            if ($exception instanceof ErrorException) {
+                throw new DwgOperationFailed('input_snapshot_failed', ['operation' => $operation], $exception);
+            }
 
             throw $exception;
         }
@@ -270,18 +282,20 @@ final class Workspace
             throw new DwgOperationFailed('input_snapshot_failed', ['operation' => $operation]);
         }
 
-        $output = \fopen($this->inputPath(), 'xb');
-        if ($output === false) {
-            \fclose($input);
-
-            throw new DwgOperationFailed('input_snapshot_failed', ['operation' => $operation]);
-        }
+        $output = false;
 
         try {
+            $output = \fopen($this->inputPath(), 'xb');
+            if ($output === false) {
+                throw new DwgOperationFailed('input_snapshot_failed', ['operation' => $operation]);
+            }
+
             $this->copyStream($input, $output, $maxInputBytes, $operation);
         } finally {
             \fclose($input);
-            \fclose($output);
+            if (\is_resource($output)) {
+                \fclose($output);
+            }
         }
     }
 
@@ -297,7 +311,7 @@ final class Workspace
             throw new InvalidDwg('input_too_large', ['operation' => $operation]);
         }
 
-        if (\file_put_contents($this->inputPath(), $contents, \LOCK_EX) === false) {
+        if (\file_put_contents($this->inputPath(), $contents, \LOCK_EX) !== \strlen($contents)) {
             throw new DwgOperationFailed('input_snapshot_failed', ['operation' => $operation]);
         }
     }

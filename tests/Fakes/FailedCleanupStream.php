@@ -20,6 +20,14 @@ final class FailedCleanupStream
 
     public static string $failureMode = 'exception';
 
+    public static string $snapshotFailure = '';
+
+    public static ?string $sourcePath = null;
+
+    public static int $closedInputs = 0;
+
+    private bool $isSource = false;
+
     private int $position = 0;
 
     /**
@@ -32,7 +40,7 @@ final class FailedCleanupStream
         $path = \str_replace('\\', '/', $path);
 
         return self::$exists
-            ? ['mode' => \str_ends_with($path, '.dxf') || \str_ends_with($path, '/residue') ? 0100600 : 0040700, 'size' => 8]
+            ? ['mode' => $path === self::$sourcePath || \str_ends_with($path, '.dxf') || \str_ends_with($path, '/residue') ? 0100600 : 0040700, 'size' => 8]
             : false;
     }
 
@@ -71,13 +79,28 @@ final class FailedCleanupStream
     /** Provide readable bytes for successful delivery before cleanup fails. */
     public function stream_open(string $path, string $mode, int $options, ?string &$openedPath): bool
     {
+        $this->isSource = \str_replace('\\', '/', $path) === self::$sourcePath;
+        if (self::$snapshotFailure === 'open' && \str_contains($mode, 'b') && $mode !== 'rb') {
+            \trigger_error('Synthetic snapshot open failure.', \E_USER_WARNING);
+
+            return false;
+        }
+
         return true;
+    }
+
+    /** Record release of a caller-owned source handle. */
+    public function stream_close(): void
+    {
+        if ($this->isSource) {
+            self::$closedInputs++;
+        }
     }
 
     /** Simulate a snapshot write without creating real artifacts. */
     public function stream_write(string $contents): int
     {
-        return \strlen($contents);
+        return self::$snapshotFailure === 'short' ? 0 : \strlen($contents);
     }
 
     /** Accept the snapshot writer's lock without creating an OS lock. */

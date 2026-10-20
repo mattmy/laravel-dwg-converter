@@ -12,6 +12,7 @@ All notable changes to this project will be documented in this file. Laravel DWG
 
 ### Fixed
 
+- Map temporary-directory and snapshot filesystem warnings to the existing package failures, close source streams when snapshot creation fails, and reject incomplete binary snapshot writes.
 - Reject cloning, serialization, and unserialization of `DwgOutput` with `LogicException` without consuming the original result or granting a failed copy ownership of its temporary files.
 - Keep temporary cleanup failures from interrupting successful delivery or replacing primary failures, including during destruction; emit one sanitized warning through Laravel's default logger without retrying cleanup or propagating logger failures.
 - Refresh artifact metadata before terminal delivery so cached sizes cannot bypass output limits.
