@@ -16,21 +16,132 @@ final class FailedCleanupStream
 
     public static int $attempts = 0;
 
+    public static string $failureMethod = 'scandir';
+
+    public static string $failureMode = 'exception';
+
+    private int $position = 0;
+
     /**
      * Expose a directory until the test releases its synthetic workspace.
      *
-     * @return array{mode: int}|false
+     * @return array{mode: int, size: int}|false
      */
     public function url_stat(string $path, int $flags): array|false
     {
-        return self::$exists ? ['mode' => 0040700] : false;
+        $path = \str_replace('\\', '/', $path);
+
+        return self::$exists
+            ? ['mode' => \str_ends_with($path, '.dxf') || \str_ends_with($path, '/residue') ? 0100600 : 0040700, 'size' => 8]
+            : false;
     }
 
     /** Fail before cleanup can enumerate or remove any actual files. */
     public function dir_opendir(string $path, int $options): bool
     {
+        return self::$failureMethod === 'scandir' ? $this->fail() : true;
+    }
+
+    /** Enumerate a synthetic child only when testing unlink failure. */
+    public function dir_readdir(): string|false
+    {
+        $entries = self::$failureMethod === 'unlink' ? ['.', '..', 'residue'] : ['.', '..'];
+
+        return $entries[$this->position++] ?? false;
+    }
+
+    /** Close the synthetic directory handle. */
+    public function dir_closedir(): bool
+    {
+        return true;
+    }
+
+    /** Fail a synthetic child removal. */
+    public function unlink(string $path): bool
+    {
+        return $this->fail();
+    }
+
+    /** Fail a synthetic directory removal. */
+    public function rmdir(string $path, int $options): bool
+    {
+        return $this->fail();
+    }
+
+    /** Provide readable bytes for successful delivery before cleanup fails. */
+    public function stream_open(string $path, string $mode, int $options, ?string &$openedPath): bool
+    {
+        return true;
+    }
+
+    /** Simulate a snapshot write without creating real artifacts. */
+    public function stream_write(string $contents): int
+    {
+        return \strlen($contents);
+    }
+
+    /** Accept the snapshot writer's lock without creating an OS lock. */
+    public function stream_lock(int $operation): bool
+    {
+        return true;
+    }
+
+    /** Accept truncation by file_put_contents without modifying real files. */
+    public function stream_truncate(int $size): bool
+    {
+        return true;
+    }
+
+    /** Allow a synthetic workspace to be created during snapshot validation. */
+    public function mkdir(string $path, int $mode, int $options): bool
+    {
+        return true;
+    }
+
+    /** Read the synthetic artifact without touching a real source file. */
+    public function stream_read(int $count): string
+    {
+        $contents = \substr('artifact', $this->position, $count);
+        $this->position += \strlen($contents);
+
+        return $contents;
+    }
+
+    /** Report the end of the synthetic artifact. */
+    public function stream_eof(): bool
+    {
+        return $this->position >= 8;
+    }
+
+    /**
+     * Expose the synthetic artifact size to file_get_contents.
+     *
+     * @return array{mode: int, size: int}
+     */
+    public function stream_stat(): array
+    {
+        return ['mode' => 0100600, 'size' => 8];
+    }
+
+    /** Emit a deterministic filesystem failure containing private diagnostic text. */
+    private function fail(): bool
+    {
         self::$attempts++;
 
-        throw new RuntimeException('Synthetic cleanup failure.');
+        if (self::$failureMode === 'false') {
+            return false;
+        }
+
+        if (self::$failureMode === 'warning') {
+            \trigger_error('Private C:/drawings/customer.dwg cleanup failure.', \E_USER_WARNING);
+
+            return false;
+        }
+
+        if (self::$failureMode === 'anonymous') {
+            throw new class('Private C:/drawings/customer.dwg cleanup failure.') extends RuntimeException {};
+        }
+
+        throw new RuntimeException('Private C:/drawings/customer.dwg cleanup failure.');
     }
 }

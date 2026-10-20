@@ -4,11 +4,15 @@ declare(strict_types=1);
 
 namespace Mattmy\DwgConverter\Internal;
 
+use ErrorException;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Log;
 use Mattmy\DwgConverter\DwgBinary;
 use Mattmy\DwgConverter\Exceptions\DwgOperationFailed;
 use Mattmy\DwgConverter\Exceptions\InvalidDwg;
 use Mattmy\DwgConverter\Exceptions\LibreDwgUnavailable;
+use RuntimeException;
+use Throwable;
 
 /**
  * Owns one isolated temporary DWG snapshot and its generated artifacts.
@@ -48,7 +52,7 @@ final class Workspace
 
         try {
             $directory = $temporaryDirectory . \DIRECTORY_SEPARATOR . \bin2hex(\random_bytes(16));
-        } catch (\Throwable $exception) {
+        } catch (Throwable $exception) {
             throw new LibreDwgUnavailable('invalid_configuration', ['operation' => $operation], $exception);
         }
 
@@ -60,8 +64,8 @@ final class Workspace
 
         try {
             $workspace->snapshot($source, $maxInputBytes, $operation);
-        } catch (\Throwable $exception) {
-            $workspace->cleanupAfterFailure();
+        } catch (Throwable $exception) {
+            $workspace->cleanup($operation, 'snapshot');
 
             throw $exception;
         }
@@ -107,38 +111,40 @@ final class Workspace
     }
 
     /**
-     * Delete only this package-owned workspace.
+     * Attempt private cleanup without interrupting the caller; warn on failure.
      */
-    public function cleanup(): void
+    public function cleanup(string $operation = 'unknown', string $phase = 'conversion'): void
     {
         if ($this->cleaned) {
             return;
         }
 
-        if (\is_link($this->directory)) {
-            \unlink($this->directory);
-            $this->cleaned = true;
+        \set_error_handler(static function (int $severity): never {
+            throw new ErrorException('Temporary cleanup failed.', 0, $severity);
+        });
 
-            return;
-        }
-
-        if (! \is_dir($this->directory)) {
-            $this->cleaned = true;
-
-            return;
-        }
-
-        $this->removeDirectory($this->directory);
-        $this->cleaned = true;
-    }
-
-    /** Attempt cleanup without replacing an existing primary failure. */
-    public function cleanupAfterFailure(): void
-    {
         try {
-            $this->cleanup();
-        } catch (\Throwable) {
-            // The caller must preserve its primary failure; cleanup policy is otherwise unchanged.
+            if (\is_link($this->directory)) {
+                if (! \unlink($this->directory)) {
+                    throw new RuntimeException('Temporary cleanup failed.');
+                }
+            } elseif (\is_dir($this->directory)) {
+                $this->removeDirectory($this->directory);
+            }
+
+            $this->cleaned = true;
+        } catch (Throwable $exception) {
+            try {
+                Log::warning('DWG converter temporary cleanup failed.', [
+                    'operation' => $operation,
+                    'phase' => $phase,
+                    'exception_class' => \get_debug_type($exception),
+                ]);
+            } catch (Throwable) {
+                // Logging failure must not turn optional cleanup into a caller failure.
+            }
+        } finally {
+            \restore_error_handler();
         }
     }
 
@@ -154,26 +160,32 @@ final class Workspace
 
     /**
      * Remove a package-owned directory without following symbolic links.
+     *
+     * @throws RuntimeException
      */
     private function removeDirectory(string $directory): void
     {
         $items = \scandir($directory);
-        if ($items !== false) {
-            foreach ($items as $item) {
-                if ($item === '.' || $item === '..') {
-                    continue;
-                }
+        if ($items === false) {
+            throw new RuntimeException('Temporary cleanup failed.');
+        }
 
-                $path = $directory . \DIRECTORY_SEPARATOR . $item;
-                if (\is_dir($path) && ! \is_link($path)) {
-                    $this->removeDirectory($path);
-                } else {
-                    \unlink($path);
-                }
+        foreach ($items as $item) {
+            if ($item === '.' || $item === '..') {
+                continue;
+            }
+
+            $path = $directory . \DIRECTORY_SEPARATOR . $item;
+            if (\is_dir($path) && ! \is_link($path)) {
+                $this->removeDirectory($path);
+            } elseif (! \unlink($path)) {
+                throw new RuntimeException('Temporary cleanup failed.');
             }
         }
 
-        \rmdir($directory);
+        if (! \rmdir($directory)) {
+            throw new RuntimeException('Temporary cleanup failed.');
+        }
     }
 
     /**

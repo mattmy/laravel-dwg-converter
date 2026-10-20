@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Mattmy\DwgConverter\DwgBinary;
 use Mattmy\DwgConverter\DwgOutput;
@@ -49,6 +50,9 @@ it('rechecks the current artifact size before terminal consumption', function (s
 })->with(['output', 'storeAs']);
 
 it('preserves terminal failures when workspace cleanup also fails', function (string $terminal, string $reason): void {
+    Log::shouldReceive('warning')->once()->with('DWG converter temporary cleanup failed.', [
+        'operation' => 'dxf', 'phase' => 'terminal', 'exception_class' => RuntimeException::class,
+    ]);
     FailedCleanupStream::$exists = true;
     FailedCleanupStream::$attempts = 0;
     \stream_wrapper_register('cleanupfailure', FailedCleanupStream::class);

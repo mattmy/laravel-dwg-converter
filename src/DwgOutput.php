@@ -43,7 +43,7 @@ final class DwgOutput
     public function __destruct()
     {
         if ($this->state === self::READY) {
-            $this->workspace->cleanup();
+            $this->workspace->cleanup($this->operation, 'destructor');
         }
     }
 
@@ -64,7 +64,7 @@ final class DwgOutput
     }
 
     /**
-     * Read all output bytes and then remove the private artifact.
+     * Read all output bytes and then attempt private cleanup without throwing.
      *
      * @throws DwgOperationFailed
      * @throws LogicException
@@ -72,7 +72,6 @@ final class DwgOutput
     public function output(): string
     {
         $this->beginConsumption();
-        $succeeded = false;
 
         try {
             $this->assertOutputFile();
@@ -81,16 +80,14 @@ final class DwgOutput
                 throw new DwgOperationFailed('output_missing', ['operation' => $this->operation]);
             }
 
-            $succeeded = true;
-
             return $contents;
         } finally {
-            $this->finishConsumption($succeeded);
+            $this->finishConsumption();
         }
     }
 
     /**
-     * Stream the output to a Laravel disk and then remove the private artifact.
+     * Stream to a Laravel disk and then attempt private cleanup without throwing.
      *
      * @throws DwgOperationFailed
      * @throws LogicException
@@ -98,7 +95,6 @@ final class DwgOutput
     public function storeAs(string $path, ?string $name = null, ?string $disk = null): string
     {
         $this->beginConsumption();
-        $succeeded = false;
 
         try {
             [$directory, $name] = $this->validateStorageDestination($path, $name);
@@ -108,15 +104,13 @@ final class DwgOutput
                 throw new DwgOperationFailed('storage_failed', ['operation' => $this->operation]);
             }
 
-            $succeeded = true;
-
             return $stored;
         } catch (DwgOperationFailed $exception) {
             throw $exception;
         } catch (Throwable $exception) {
             throw new DwgOperationFailed('storage_failed', ['operation' => $this->operation], $exception);
         } finally {
-            $this->finishConsumption($succeeded);
+            $this->finishConsumption();
         }
     }
 
@@ -245,16 +239,12 @@ final class DwgOutput
     }
 
     /**
-     * Remove temporary resources after every terminal path.
+     * Attempt cleanup and finish consumption after every terminal path.
      */
-    private function finishConsumption(bool $succeeded): void
+    private function finishConsumption(): void
     {
         try {
-            if ($succeeded) {
-                $this->workspace->cleanup();
-            } else {
-                $this->workspace->cleanupAfterFailure();
-            }
+            $this->workspace->cleanup($this->operation, 'terminal');
         } finally {
             $this->state = self::CONSUMED;
         }
