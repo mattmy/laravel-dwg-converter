@@ -39,8 +39,9 @@ final class FailedCleanupStream
     {
         $path = \str_replace('\\', '/', $path);
 
+        // Synthetic paths must stay readable regardless of the runner's UID/GID.
         return self::$exists
-            ? ['mode' => $path === self::$sourcePath || \str_ends_with($path, '.dxf') || \str_ends_with($path, '/residue') ? 0100600 : 0040700, 'size' => 8]
+            ? ['mode' => $path === self::$sourcePath || \str_ends_with($path, '.dxf') || \str_ends_with($path, '/residue') ? 0100666 : 0040777, 'size' => 8]
             : false;
     }
 
@@ -143,7 +144,7 @@ final class FailedCleanupStream
      */
     public function stream_stat(): array
     {
-        return ['mode' => 0100600, 'size' => 8];
+        return ['mode' => 0100666, 'size' => 8];
     }
 
     /** Emit a deterministic filesystem failure containing private diagnostic text. */

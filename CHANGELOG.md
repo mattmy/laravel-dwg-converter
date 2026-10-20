@@ -14,6 +14,7 @@ All notable changes to this project will be documented in this file. Laravel DWG
 
 ### Fixed
 
+- Make filesystem failure-injection tests independent of Unix file ownership.
 - Validate embedded BMP, PNG, and WMF thumbnail headers and container bounds before returning their original bytes, without adding an image decoder dependency.
 - Map temporary-directory and snapshot filesystem warnings to the existing package failures, close source streams when snapshot creation fails, and reject incomplete binary snapshot writes.
 - Reject NUL bytes in source and temporary-directory paths through the existing input and configuration contracts.
