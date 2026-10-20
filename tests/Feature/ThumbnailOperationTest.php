@@ -74,9 +74,7 @@ it('fails when LibreDWG produces no thumbnail', function (): void {
         array $_command,
         Workspace $_workspace,
         float $_timeout,
-        ?int $_maxOutputBytes,
         string $_operation,
-        ?string $_stdoutPath,
     ): void {});
     app()->instance(ProcessRunner::class, $runner);
 

@@ -88,9 +88,7 @@ function successfulImageRunner(): FakeProcessRunner
         array $command,
         Workspace $workspace,
         float $_timeout,
-        ?int $_maxOutputBytes,
         string $_operation,
-        ?string $_stdoutPath,
     ): void {
         if ($command[0] === 'dwg2dxf') {
             \file_put_contents($workspace->outputPath('drawing.dxf'), "0\nSECTION\n2\nENTITIES\n0\nENDSEC\n0\nEOF\n");

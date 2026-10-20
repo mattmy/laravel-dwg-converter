@@ -55,7 +55,6 @@ final class Converter
                 [$executable, $workspace->inputPath()],
                 $workspace,
                 $configuration['timeout'],
-                $configuration['max_output_bytes'],
                 $operation,
             );
 
@@ -100,7 +99,6 @@ final class Converter
                 $command,
                 $workspace,
                 $configuration['timeout'],
-                $configuration['max_output_bytes'],
                 $operation,
             );
             $this->assertBoundedFile($output, $workspace, $operation, $configuration['max_output_bytes']);
@@ -136,9 +134,7 @@ final class Converter
                 [$executable, '-O', 'JSON', '-o', $output, $workspace->inputPath()],
                 $workspace,
                 $configuration['timeout'],
-                $configuration['effective_output_limit'],
                 $operation,
-                null,
                 'dwgread',
             );
             $this->assertJson($output, $workspace, $configuration['effective_output_limit']);
@@ -201,9 +197,7 @@ final class Converter
                 $dxfCommand,
                 $workspace,
                 $dxfConfiguration['timeout'],
-                $dxfConfiguration['max_output_bytes'],
                 $operation,
-                null,
                 'dwg2dxf',
             );
             $this->assertBoundedFile($dxf, $workspace, $operation, $dxfConfiguration['max_output_bytes']);
@@ -227,9 +221,7 @@ final class Converter
                 ],
                 $workspace,
                 $libreOfficeConfiguration['timeout'],
-                $libreOfficeConfiguration['max_output_bytes'],
                 $operation,
-                null,
                 'libreoffice',
             );
             $this->assertImage($intermediateImage, $format, $workspace, $operation, $libreOfficeConfiguration['max_output_bytes']);
@@ -251,9 +243,7 @@ final class Converter
                 $command,
                 $workspace,
                 $imageMagickConfiguration['timeout'],
-                $imageMagickConfiguration['max_output_bytes'],
                 $operation,
-                null,
                 'imagemagick',
             );
             $this->assertImage($output, $format, $workspace, $operation, $imageMagickConfiguration['max_output_bytes']);
@@ -281,6 +271,7 @@ final class Converter
      *
      * @throws DwgOperationFailed
      * @throws InvalidDwg
+     * @throws LibreDwgUnavailable
      */
     private function workspace(
         UploadedFile|string|DwgBinary $source,
@@ -350,7 +341,7 @@ final class Converter
     /**
      * Normalize the JSON-specific limit and derive its effective output limit.
      *
-     * @return array{executable: string, timeout: float, max_input_bytes: ?int, max_output_bytes: ?int, max_json_output_bytes: ?int, effective_output_limit: ?int, temporary_directory: string}
+     * @return array{executable: string, timeout: float, max_input_bytes: ?int, max_output_bytes: ?int, effective_output_limit: ?int, temporary_directory: string}
      *
      * @throws LibreDwgUnavailable
      */
@@ -361,7 +352,6 @@ final class Converter
 
         return [
             ...$configuration,
-            'max_json_output_bytes' => $maxJsonOutputBytes,
             'effective_output_limit' => $this->effectiveOutputLimit(
                 $configuration['max_output_bytes'],
                 $maxJsonOutputBytes,

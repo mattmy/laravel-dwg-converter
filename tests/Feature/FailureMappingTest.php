@@ -69,9 +69,7 @@ it('preserves an executable availability failure', function (): void {
             array $_command,
             Workspace $_workspace,
             float $_timeout,
-            ?int $_maxOutputBytes,
             string $_operation,
-            ?string $_stdoutPath,
         ): void {},
         $failure,
     );
@@ -86,9 +84,7 @@ it('preserves a stable process failure', function (): void {
         array $_command,
         Workspace $_workspace,
         float $_timeout,
-        ?int $_maxOutputBytes,
         string $_operation,
-        ?string $_stdoutPath,
     ): void {
         throw new DwgOperationFailed('process_failed', [
             'operation' => 'thumbnail',
