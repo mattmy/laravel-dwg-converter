@@ -6,6 +6,8 @@ All notable changes to this project will be documented in this file. Laravel DWG
 
 ## [Unreleased]
 
+## [2.0.1] - 2026-10-20
+
 ### Removed
 
 - Remove the unused internal stdout-to-file sink and its runner-only size parameter; artifact byte limits and process diagnostics remain unchanged.
@@ -59,7 +61,8 @@ All notable changes to this project will be documented in this file. Laravel DWG
 - Add `Dwg::toJson($source)->convert()` for validated LibreDWG structural JSON output.
 - Allow missing, null, zero, and negative byte-limit settings to disable their respective limits.
 
-[Unreleased]: https://github.com/mattmy/laravel-dwg-converter/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/mattmy/laravel-dwg-converter/compare/v2.0.1...HEAD
+[2.0.1]: https://github.com/mattmy/laravel-dwg-converter/compare/v0.2.0...v2.0.1
 [0.2.0]: https://github.com/mattmy/laravel-dwg-converter/compare/v0.1.2...v0.2.0
 [0.1.2]: https://github.com/mattmy/laravel-dwg-converter/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/mattmy/laravel-dwg-converter/compare/v0.1.0...v0.1.1
