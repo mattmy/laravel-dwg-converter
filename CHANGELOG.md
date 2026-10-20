@@ -12,6 +12,7 @@ All notable changes to this project will be documented in this file. Laravel DWG
 
 ### Fixed
 
+- Keep temporary cleanup failures from interrupting successful delivery or replacing primary failures, including during destruction; emit one sanitized warning through Laravel's default logger without retrying cleanup or propagating logger failures.
 - Refresh artifact metadata before terminal delivery so cached sizes cannot bypass output limits.
 - Keep LibreOffice and ImageMagick read failures as process failures rather than invalid DWG input.
 - Report truncated WebP artifacts as `image_invalid` before reading their RIFF length.

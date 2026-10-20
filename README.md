@@ -97,10 +97,14 @@ Every operation accepts a valid `UploadedFile`, a local absolute path, or bytes 
 Each successful operation returns a one-time `DwgOutput`:
 
 - `extension()` and `mimeType()` inspect trusted output metadata without consuming it.
-- `storeAs()` streams the artifact to Laravel Storage and cleans up temporary resources.
+- `storeAs()` streams the artifact to Laravel Storage and then attempts temporary cleanup.
 - `output()` returns all bytes as a string and should only be used for outputs that safely fit in PHP memory.
 
 ## Errors and operational limits
+
+Temporary cleanup failures emit a sanitized `warning` through Laravel's default logger without
+interrupting conversion or delivery. Temporary files may remain; consumed results do not retry cleanup.
+Logger failures also leave the operation's result or original exception unchanged.
 
 Failures use `LibreDwgUnavailable`, `InvalidDwg`, or `DwgOperationFailed`. Each exception provides a stable
 `reason()` and sanitized scalar `context()`.

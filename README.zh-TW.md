@@ -96,10 +96,13 @@ bytes。普通 string 一律視為 path。
 每次成功操作都回傳一次性的 `DwgOutput`：
 
 - `extension()` 與 `mimeType()` 可在不消費結果的情況下讀取可信的輸出資訊。
-- `storeAs()` 將產物串流至 Laravel Storage，之後清理暫存資源。
+- `storeAs()` 將產物串流至 Laravel Storage，之後嘗試清理暫存資源。
 - `output()` 將全部 bytes 讀入 string，只適合能安全放入 PHP 記憶體的輸出。
 
 ## 錯誤與操作限制
+
+暫存清理失敗時，套件會透過 Laravel 預設 logger 記錄去敏的 `warning`，不會中斷轉換或交付。
+暫存檔可能殘留，已消費結果不會重試清理；Log 寫入失敗也不改變主功能結果或原始例外。
 
 失敗時會拋出 `LibreDwgUnavailable`、`InvalidDwg` 或 `DwgOperationFailed`。每個例外都提供穩定的
 `reason()` 與去敏後的 scalar `context()`。
