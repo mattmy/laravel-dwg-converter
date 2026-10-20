@@ -141,6 +141,8 @@ final class DwgOutput
      */
     private function assertOutputFile(): void
     {
+        \clearstatcache(true, $this->path);
+
         if (! $this->workspace->owns($this->path) || ! \is_file($this->path) || ! \is_readable($this->path)) {
             throw new DwgOperationFailed('output_missing', ['operation' => $this->operation]);
         }

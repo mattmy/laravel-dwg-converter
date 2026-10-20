@@ -24,6 +24,30 @@ it('allows exactly one terminal consumption', function (): void {
         ->and(fn () => $output->output())->toThrow(LogicException::class);
 });
 
+it('rechecks the current artifact size before terminal consumption', function (string $terminal): void {
+    Storage::fake('exports');
+    $workspace = Workspace::fromSource(
+        DwgBinary::from('AC1032 drawing'),
+        config()->string('dwg-converter.temporary_directory'),
+        1024,
+        'dxf',
+    );
+    $artifact = $workspace->outputPath('output.dxf');
+    if (\file_put_contents($artifact, 'initial') !== 7) {
+        throw new RuntimeException('Unable to create the output fixture.');
+    }
+    $output = new DwgOutput($workspace, $artifact, 'dxf', 'image/vnd.dxf', 8, 'dxf');
+    expect(\filesize($artifact))->toBe(7);
+    if (\file_put_contents($artifact, 'now oversized') !== 13) {
+        throw new RuntimeException('Unable to grow the output fixture.');
+    }
+
+    expect(fn () => $terminal === 'output' ? $output->output() : $output->storeAs('', 'drawing', 'exports'))
+        ->toThrow(DwgOperationFailed::class, 'output_too_large')
+        ->and(fn () => $output->output())->toThrow(LogicException::class)
+        ->and(Storage::disk('exports')->allFiles())->toBe([]);
+})->with(['output', 'storeAs']);
+
 it('preserves terminal failures when workspace cleanup also fails', function (string $terminal, string $reason): void {
     FailedCleanupStream::$exists = true;
     FailedCleanupStream::$attempts = 0;
