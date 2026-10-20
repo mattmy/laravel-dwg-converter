@@ -37,7 +37,8 @@ final class Workspace
         ?int $maxInputBytes,
         string $operation,
     ): self {
-        if (! self::isAbsolutePath($temporaryDirectory)) {
+        if (! self::isAbsolutePath($temporaryDirectory)
+            || (\file_exists($temporaryDirectory) && ! \is_dir($temporaryDirectory))) {
             throw new LibreDwgUnavailable('invalid_configuration', ['operation' => $operation]);
         }
 

@@ -44,6 +44,24 @@ it('checks only the executable needed by the selected operation', function (): v
         ->toStartWith("\x89PNG");
 });
 
+it('rejects an existing file used as the temporary directory before running a tool', function (): void {
+    $path = \tempnam(\sys_get_temp_dir(), 'dwg-invalid-root-');
+    if ($path === false) {
+        throw new RuntimeException('Unable to create the configuration fixture.');
+    }
+    $runner = FakeProcessRunner::writesFile('output.dxf', 'unused');
+    app()->instance(ProcessRunner::class, $runner);
+    config()->set('dwg-converter.temporary_directory', $path);
+
+    try {
+        expect(fn () => Dwg::toDxf(DwgBinary::from('AC1032 drawing'))->convert())
+            ->toThrow(LibreDwgUnavailable::class, 'invalid_configuration')
+            ->and($runner->commands)->toBe([]);
+    } finally {
+        \unlink($path);
+    }
+});
+
 it('preserves an executable availability failure', function (): void {
     $failure = new LibreDwgUnavailable('executable_not_found', ['operation' => 'thumbnail']);
     $runner = new FakeProcessRunner(
