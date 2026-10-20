@@ -60,7 +60,7 @@ final class Workspace
         try {
             $workspace->snapshot($source, $maxInputBytes, $operation);
         } catch (\Throwable $exception) {
-            $workspace->cleanup();
+            $workspace->cleanupAfterFailure();
 
             throw $exception;
         }
@@ -129,6 +129,26 @@ final class Workspace
 
         $this->removeDirectory($this->directory);
         $this->cleaned = true;
+    }
+
+    /** Attempt cleanup without replacing an existing primary failure. */
+    public function cleanupAfterFailure(): void
+    {
+        try {
+            $this->cleanup();
+        } catch (\Throwable) {
+            // The caller must preserve its primary failure; cleanup policy is otherwise unchanged.
+        }
+    }
+
+    /**
+     * Determine whether a path is rooted on Windows or Unix.
+     */
+    public static function isAbsolutePath(string $path): bool
+    {
+        return \DIRECTORY_SEPARATOR === '\\'
+            ? \preg_match('/^[A-Za-z]:[\\\\\/]/', $path) === 1
+            : \str_starts_with($path, '/');
     }
 
     /**
@@ -296,15 +316,5 @@ final class Workspace
                 throw new DwgOperationFailed('input_snapshot_failed', ['operation' => $operation]);
             }
         }
-    }
-
-    /**
-     * Determine whether a path is rooted on Windows or Unix.
-     */
-    public static function isAbsolutePath(string $path): bool
-    {
-        return \DIRECTORY_SEPARATOR === '\\'
-            ? \preg_match('/^[A-Za-z]:[\\\\\/]/', $path) === 1
-            : \str_starts_with($path, '/');
     }
 }

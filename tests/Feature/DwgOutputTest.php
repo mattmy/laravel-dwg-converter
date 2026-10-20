@@ -9,6 +9,7 @@ use Mattmy\DwgConverter\Exceptions\DwgOperationFailed;
 use Mattmy\DwgConverter\Facades\Dwg;
 use Mattmy\DwgConverter\Internal\ProcessRunner;
 use Mattmy\DwgConverter\Internal\Workspace;
+use Mattmy\DwgConverter\Tests\Fakes\FailedCleanupStream;
 use Mattmy\DwgConverter\Tests\Fakes\FakeProcessRunner;
 
 it('allows exactly one terminal consumption', function (): void {
@@ -22,6 +23,29 @@ it('allows exactly one terminal consumption', function (): void {
         ->and($output->output())->toBe($contents)
         ->and(fn () => $output->output())->toThrow(LogicException::class);
 });
+
+it('preserves terminal failures when workspace cleanup also fails', function (string $terminal, string $reason): void {
+    FailedCleanupStream::$exists = true;
+    FailedCleanupStream::$attempts = 0;
+    \stream_wrapper_register('cleanupfailure', FailedCleanupStream::class);
+    $workspace = (new ReflectionClass(Workspace::class))->newInstanceWithoutConstructor();
+    (new ReflectionProperty(Workspace::class, 'directory'))->setValue($workspace, 'cleanupfailure://workspace');
+    $output = new DwgOutput($workspace, $workspace->outputPath('output.dxf'), 'dxf', 'image/vnd.dxf', null, 'dxf');
+
+    try {
+        expect(fn () => $terminal === 'output' ? $output->output() : $output->storeAs('../invalid', 'drawing'))
+            ->toThrow(DwgOperationFailed::class, $reason)
+            ->and(FailedCleanupStream::$attempts)->toBe(1)
+            ->and(fn () => $output->output())->toThrow(LogicException::class);
+        unset($output);
+        expect(FailedCleanupStream::$attempts)->toBe(1);
+    } finally {
+        FailedCleanupStream::$exists = false;
+        \clearstatcache();
+        $workspace->cleanup();
+        \stream_wrapper_unregister('cleanupfailure');
+    }
+})->with(['read' => ['output', 'output_missing'], 'storage' => ['storeAs', 'storage_failed']]);
 
 it('streams an output to a named Laravel disk', function (): void {
     Storage::fake('drawings');

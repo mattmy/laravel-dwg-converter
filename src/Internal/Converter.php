@@ -64,7 +64,7 @@ final class Converter
 
             return new DwgOutput($workspace, $thumbnail, $extension, $mimeType, $configuration['max_output_bytes'], $operation, $sourceStem);
         } catch (\Throwable $exception) {
-            $workspace->cleanup();
+            $workspace->cleanupAfterFailure();
 
             throw $exception;
         }
@@ -108,7 +108,7 @@ final class Converter
 
             return new DwgOutput($workspace, $output, 'dxf', 'image/vnd.dxf', $configuration['max_output_bytes'], $operation, $sourceStem);
         } catch (\Throwable $exception) {
-            $workspace->cleanup();
+            $workspace->cleanupAfterFailure();
 
             throw $exception;
         }
@@ -153,7 +153,7 @@ final class Converter
                 $sourceStem,
             );
         } catch (\Throwable $exception) {
-            $workspace->cleanup();
+            $workspace->cleanupAfterFailure();
 
             throw $exception;
         }
@@ -268,7 +268,7 @@ final class Converter
                 $sourceStem,
             );
         } catch (\Throwable $exception) {
-            $workspace->cleanup();
+            $workspace->cleanupAfterFailure();
 
             throw $exception;
         }

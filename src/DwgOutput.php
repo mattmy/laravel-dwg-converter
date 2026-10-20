@@ -42,7 +42,9 @@ final class DwgOutput
      */
     public function __destruct()
     {
-        $this->workspace->cleanup();
+        if ($this->state === self::READY) {
+            $this->workspace->cleanup();
+        }
     }
 
     /**
@@ -70,6 +72,7 @@ final class DwgOutput
     public function output(): string
     {
         $this->beginConsumption();
+        $succeeded = false;
 
         try {
             $this->assertOutputFile();
@@ -78,9 +81,11 @@ final class DwgOutput
                 throw new DwgOperationFailed('output_missing', ['operation' => $this->operation]);
             }
 
+            $succeeded = true;
+
             return $contents;
         } finally {
-            $this->finishConsumption();
+            $this->finishConsumption($succeeded);
         }
     }
 
@@ -93,6 +98,7 @@ final class DwgOutput
     public function storeAs(string $path, ?string $name = null, ?string $disk = null): string
     {
         $this->beginConsumption();
+        $succeeded = false;
 
         try {
             [$directory, $name] = $this->validateStorageDestination($path, $name);
@@ -102,13 +108,15 @@ final class DwgOutput
                 throw new DwgOperationFailed('storage_failed', ['operation' => $this->operation]);
             }
 
+            $succeeded = true;
+
             return $stored;
         } catch (DwgOperationFailed $exception) {
             throw $exception;
         } catch (Throwable $exception) {
             throw new DwgOperationFailed('storage_failed', ['operation' => $this->operation], $exception);
         } finally {
-            $this->finishConsumption();
+            $this->finishConsumption($succeeded);
         }
     }
 
@@ -237,10 +245,14 @@ final class DwgOutput
     /**
      * Remove temporary resources after every terminal path.
      */
-    private function finishConsumption(): void
+    private function finishConsumption(bool $succeeded): void
     {
         try {
-            $this->workspace->cleanup();
+            if ($succeeded) {
+                $this->workspace->cleanup();
+            } else {
+                $this->workspace->cleanupAfterFailure();
+            }
         } finally {
             $this->state = self::CONSUMED;
         }
