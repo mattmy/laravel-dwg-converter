@@ -21,7 +21,7 @@ final class FakeProcessRunner implements ProcessRunner
     public array $inputSnapshots = [];
 
     /**
-     * @param  Closure(list<string>, Workspace, float, string): void  $run
+     * @param  Closure(list<string>, Workspace, float, string): (void|string)  $run
      */
     public function __construct(
         private readonly Closure $run,
@@ -85,5 +85,32 @@ final class FakeProcessRunner implements ProcessRunner
             $timeout,
             $operation,
         );
+    }
+
+    /**
+     * Record a query and return the configured stdout without creating a file.
+     *
+     * @param  list<string>  $command
+     */
+    public function capture(
+        array $command,
+        Workspace $workspace,
+        float $timeout,
+        string $operation,
+        string $stage = 'convert',
+        ?int $maxOutputBytes = null,
+    ): string {
+        $this->commands[] = $command;
+        $snapshot = \file_get_contents($workspace->inputPath());
+        if (! \is_string($snapshot)) {
+            throw new \RuntimeException('Unable to read the package input snapshot.');
+        }
+        $this->inputSnapshots[] = $snapshot;
+        $stdout = ($this->run)($command, $workspace, $timeout, $operation);
+        if (! \is_string($stdout)) {
+            throw new \RuntimeException('The fake query must return stdout.');
+        }
+
+        return $stdout;
     }
 }

@@ -24,6 +24,7 @@ final class SymfonyProcessRunner implements ProcessRunner
         'dwgbmp' => ['dwgfile'],
         'dwg2dxf' => ['--as', '-o'],
         'dwgread' => ['--format', 'json', '-o'],
+        'dwglayers' => ['--flags'],
         'libreoffice' => ['--headless', '--convert-to', '--outdir'],
         'imagemagick' => ['-fuzz', '-trim', '-alpha'],
     ];
@@ -109,27 +110,89 @@ final class SymfonyProcessRunner implements ProcessRunner
         string $operation,
         string $stage = 'convert',
     ): void {
+        $this->execute($command, $workspace, $timeout, $operation, $stage, false, null);
+    }
+
+    /**
+     * Return stdout data while enforcing the limit as chunks arrive.
+     *
+     * @param  list<string>  $command
+     *
+     * @throws DwgOperationFailed
+     * @throws InvalidDwg
+     */
+    public function capture(
+        array $command,
+        Workspace $workspace,
+        float $timeout,
+        string $operation,
+        string $stage = 'convert',
+        ?int $maxOutputBytes = null,
+    ): string {
+        return $this->execute($command, $workspace, $timeout, $operation, $stage, true, $maxOutputBytes);
+    }
+
+    /**
+     * Execute one command with shared timeout and failure classification.
+     *
+     * @param  list<string>  $command
+     *
+     * @throws DwgOperationFailed
+     * @throws InvalidDwg
+     */
+    private function execute(
+        array $command,
+        Workspace $workspace,
+        float $timeout,
+        string $operation,
+        string $stage,
+        bool $capture,
+        ?int $maxOutputBytes,
+    ): string {
         $stderr = '';
+        $stdout = '';
+        $outputExceeded = false;
+        $process = new Process($command, $workspace->directory());
+        $process->setTimeout($timeout);
 
         try {
-            $process = new Process($command, $workspace->directory());
-            $process->setTimeout($timeout);
-            $process->run(function (string $type, string $buffer) use (&$stderr): void {
+            $process->run(function (string $type, string $buffer) use ($process, $capture, $maxOutputBytes, $operation, $stage, &$stderr, &$stdout, &$outputExceeded): void {
                 if ($type === Process::ERR) {
                     $stderr = \substr($stderr . $buffer, 0, self::STDERR_LIMIT);
+                    $process->clearErrorOutput();
+                } else {
+                    $process->clearOutput();
+                    if ($capture && ! $outputExceeded) {
+                        if ($maxOutputBytes !== null && \strlen($buffer) > $maxOutputBytes - \strlen($stdout)) {
+                            // Stopping the process may invoke this callback again; discard further stdout.
+                            $outputExceeded = true;
+
+                            throw new DwgOperationFailed('output_too_large', $this->context($operation, $stage));
+                        }
+                        $stdout .= $buffer;
+                    }
                 }
             });
         } catch (ProcessTimedOutException $exception) {
             throw new DwgOperationFailed('process_timed_out', $this->context($operation, $stage), $exception);
         } catch (\Throwable $exception) {
+            if ($exception instanceof DwgOperationFailed) {
+                throw $exception;
+            }
+
             throw new DwgOperationFailed('process_failed', $this->context($operation, $stage), $exception);
+        } finally {
+            if ($process->isRunning()) {
+                $process->stop(0);
+            }
         }
 
         if (! $process->isSuccessful()) {
             $context = [
                 ...$this->context($operation, $stage),
                 'exit_code' => $process->getExitCode(),
-                'stderr' => $this->summary($stderr),
+                // Omit layer diagnostics because they may contain names that cannot be reliably redacted.
+                'stderr' => $operation === 'layers' ? '[diagnostic omitted]' : $this->summary($stderr),
             ];
             if (($operation !== 'image' || $stage === 'dwg2dxf') && $this->isRejectedInput($stderr)) {
                 throw new InvalidDwg('libredwg_rejected_input', $context);
@@ -137,6 +200,8 @@ final class SymfonyProcessRunner implements ProcessRunner
 
             throw new DwgOperationFailed('process_failed', $context);
         }
+
+        return $stdout;
     }
 
     /**

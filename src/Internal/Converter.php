@@ -5,8 +5,10 @@ declare(strict_types=1);
 namespace Mattmy\DwgConverter\Internal;
 
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Collection;
 use JsonException;
 use Mattmy\DwgConverter\DwgBinary;
+use Mattmy\DwgConverter\DwgLayer;
 use Mattmy\DwgConverter\DwgOutput;
 use Mattmy\DwgConverter\DxfVersion;
 use Mattmy\DwgConverter\Exceptions\DwgOperationFailed;
@@ -262,6 +264,69 @@ final class Converter
 
             throw $exception;
         }
+    }
+
+    /**
+     * Read all reported layers without transferring temporary resource ownership.
+     *
+     * @return Collection<int, DwgLayer>
+     *
+     * @throws DwgOperationFailed
+     * @throws InvalidDwg
+     * @throws LibreDwgUnavailable
+     */
+    public function layers(UploadedFile|string|DwgBinary $source): Collection
+    {
+        $operation = 'layers';
+        $configuration = $this->configuration('dwglayers', $operation);
+        $workspace = $this->workspace($source, $operation, $configuration);
+
+        try {
+            $executable = $configuration['executable'];
+            $this->processRunner->assertAvailable($executable, $operation, 'dwglayers', 'dwglayers');
+            $stdout = $this->processRunner->capture(
+                [$executable, '--flags', $workspace->inputPath()],
+                $workspace,
+                $configuration['timeout'],
+                $operation,
+                'dwglayers',
+                $configuration['max_output_bytes'],
+            );
+
+            return $this->parseLayers($stdout);
+        } finally {
+            $workspace->cleanup($operation, 'conversion');
+        }
+    }
+
+    /**
+     * Parse complete UTF-8 flag records without trimming or deduplicating names.
+     *
+     * @return Collection<int, DwgLayer>
+     *
+     * @throws DwgOperationFailed
+     */
+    private function parseLayers(string $stdout): Collection
+    {
+        if ($stdout === '') {
+            return new Collection();
+        }
+        if (\preg_match('//u', $stdout) !== 1 || ! \str_ends_with($stdout, "\n")) {
+            throw new DwgOperationFailed('layers_invalid', ['operation' => 'layers', 'stage' => 'dwglayers']);
+        }
+
+        $layers = [];
+        foreach (\explode("\n", \substr($stdout, 0, -1)) as $line) {
+            if (\str_ends_with($line, "\r")) {
+                $line = \substr($line, 0, -1);
+            }
+            if (\preg_match('/^([ f])([+-])([ l])\t(.+)$/Du', $line, $fields) !== 1) {
+                throw new DwgOperationFailed('layers_invalid', ['operation' => 'layers', 'stage' => 'dwglayers']);
+            }
+            $layers[] = new DwgLayer($fields[4], $fields[1] === 'f', $fields[2] === '-', $fields[3] === 'l');
+        }
+
+        return new Collection($layers);
     }
 
     /**

@@ -9,6 +9,7 @@ Laravel DWG Converter 將 LibreDWG 命令列工具整合至 Laravel 應用，
 ## 功能特色
 
 - 擷取 DWG 內嵌縮圖。
+- 查詢圖層名稱與凍結、關閉、鎖定狀態。
 - 將 DWG 轉換為 ASCII DXF。
 - 將 DWG 輸出為結構 JSON。
 - 建立 PNG、JPEG 或 WebP 預覽。
@@ -35,6 +36,7 @@ ImageMagick。
 | `Dwg::thumbnail(...)->extract()` | LibreDWG `dwgbmp` |
 | `Dwg::toDxf(...)->convert()` | LibreDWG `dwg2dxf` |
 | `Dwg::toJson(...)->convert()` | 具 JSON output 能力的 LibreDWG `dwgread` |
+| `Dwg::layers(...)->read()` | LibreDWG `dwglayers --flags` |
 | `Dwg::toImage(...)->convert()` | LibreDWG `dwg2dxf`、LibreOffice 7.4+ `soffice`、ImageMagick 7 `magick` |
 
 本套件不會下載或附帶這些工具。LibreDWG 安裝方式請參考
@@ -93,7 +95,7 @@ $path = $image->storeAs('drawing-previews', 'floor-plan.webp', 's3');
 每個操作都接受有效的 `UploadedFile`、local absolute path，或以 `DwgBinary::from($bytes)` 明確包裝的
 bytes。普通 string 一律視為 path。
 
-每次成功操作都回傳一次性的 `DwgOutput`：
+每次成功的檔案操作都回傳一次性的 `DwgOutput`：
 
 - `extension()` 與 `mimeType()` 可在不消費結果的情況下讀取可信的輸出資訊。
 - `storeAs()` 將產物串流至 Laravel Storage，之後嘗試清理暫存資源。
