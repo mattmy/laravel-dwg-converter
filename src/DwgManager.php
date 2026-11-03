@@ -9,6 +9,7 @@ use Mattmy\DwgConverter\Internal\Converter;
 use Mattmy\DwgConverter\Operations\DxfConversion;
 use Mattmy\DwgConverter\Operations\ImageConversion;
 use Mattmy\DwgConverter\Operations\JsonConversion;
+use Mattmy\DwgConverter\Operations\LayerReading;
 use Mattmy\DwgConverter\Operations\ThumbnailExtraction;
 
 /**
@@ -51,5 +52,11 @@ final class DwgManager
     public function thumbnail(UploadedFile|string|DwgBinary $source): ThumbnailExtraction
     {
         return new ThumbnailExtraction($this->converter, $source);
+    }
+
+    /** Bind a source for an independent layer-data query. */
+    public function layers(UploadedFile|string|DwgBinary $source): LayerReading
+    {
+        return new LayerReading($this->converter, $source);
     }
 }

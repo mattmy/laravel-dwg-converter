@@ -6,6 +6,13 @@ All notable changes to this project will be documented in this file. Laravel DWG
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-03
+
+### Added
+
+- Read reusable layer data with `Dwg::layers($source)->read()`, immutable `DwgLayer` records, and a standard Laravel Collection.
+- Configure `dwglayers` with `LIBREDWG_DWGLAYERS`; capture stdout with the existing general output limit and preserve strict UTF-8/flag validation.
+
 ## [0.2.1] - 2026-10-20
 
 ### Removed
@@ -62,7 +69,8 @@ All notable changes to this project will be documented in this file. Laravel DWG
 - Add `Dwg::toJson($source)->convert()` for validated LibreDWG structural JSON output.
 - Allow missing, null, zero, and negative byte-limit settings to disable their respective limits.
 
-[Unreleased]: https://github.com/mattmy/laravel-dwg-converter/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/mattmy/laravel-dwg-converter/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/mattmy/laravel-dwg-converter/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/mattmy/laravel-dwg-converter/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/mattmy/laravel-dwg-converter/compare/v0.1.2...v0.2.0
 [0.1.2]: https://github.com/mattmy/laravel-dwg-converter/compare/v0.1.1...v0.1.2

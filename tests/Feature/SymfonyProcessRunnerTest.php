@@ -8,6 +8,7 @@ use Mattmy\DwgConverter\Exceptions\InvalidDwg;
 use Mattmy\DwgConverter\Exceptions\LibreDwgUnavailable;
 use Mattmy\DwgConverter\Internal\SymfonyProcessRunner;
 use Mattmy\DwgConverter\Internal\Workspace;
+use Symfony\Component\Process\Exception\ProcessTimedOutException;
 
 /**
  * Create a platform-native executable that returns controlled probe output.
@@ -57,6 +58,7 @@ it('accepts a tool only when its required CLI shape is present', function (
     'dwgbmp' => ['thumbnail', 'dwgbmp', 'dwgbmp 0.14', 'Usage: dwgbmp DWGFILE'],
     'dwg2dxf' => ['dxf', 'dwg2dxf', 'dwg2dxf 0.14', 'Usage: dwg2dxf --as version -o outfile DWGFILE'],
     'dwgread' => ['json', 'dwgread', 'dwgread 0.14', 'Usage: dwgread --format fmt JSON -o outfile DWGFILE'],
+    'dwglayers' => ['layers', 'dwglayers', 'dwglayers 0.14', 'Usage: dwglayers --flags DWGFILE'],
     'LibreOffice' => ['image', 'libreoffice', 'LibreOffice 7.4.0', 'Usage: soffice --headless --convert-to fmt --outdir dir'],
     'ImageMagick' => ['image', 'imagemagick', 'Version: ImageMagick 7.0.0', 'Usage: magick -fuzz value -trim -alpha value'],
 ]);
@@ -239,4 +241,86 @@ it('redacts paths from a generic process failure', function (): void {
     $workspace->cleanup();
 
     throw new RuntimeException('The process failure was not thrown.');
+});
+
+it('captures chunked stdout separately from noisy diagnostics', function (?int $limit): void {
+    $workspace = Workspace::fromSource(DwgBinary::from('AC1032 fixture'), config()->string('dwg-converter.temporary_directory'), 1024, 'layers');
+
+    try {
+        $stdout = (new SymfonyProcessRunner())->capture(
+            [\PHP_BINARY, '-r', 'for ($i=0; $i<32; $i++) { fwrite(STDOUT, str_repeat("x", 4096)); fflush(STDOUT); fwrite(STDERR, str_repeat("diagnostic", 4096)); }'],
+            $workspace,
+            10.0,
+            'layers',
+            'dwglayers',
+            $limit,
+        );
+        expect($stdout)->toBe(\str_repeat('x', 131072));
+    } finally {
+        $workspace->cleanup();
+    }
+})->with([[131072], [null]]);
+
+it('stops capture on excess stdout before the child can finish', function (): void {
+    $workspace = Workspace::fromSource(DwgBinary::from('AC1032 fixture'), config()->string('dwg-converter.temporary_directory'), 1024, 'layers');
+
+    try {
+        expect(fn () => (new SymfonyProcessRunner())->capture(
+            [\PHP_BINARY, '-r', 'fwrite(STDOUT, str_repeat("x", 65536)); fflush(STDOUT); sleep(3); file_put_contents("should-not-exist", "finished");'],
+            $workspace,
+            1.0,
+            'layers',
+            'dwglayers',
+            8,
+        ))->toThrow(DwgOperationFailed::class, 'output_too_large');
+        expect(\file_exists($workspace->outputPath('should-not-exist')))->toBeFalse();
+    } finally {
+        $workspace->cleanup();
+    }
+});
+
+it('maps capture exit failures and keeps bounded path-free stderr', function (bool $rejected): void {
+    $workspace = Workspace::fromSource(DwgBinary::from('AC1032 fixture'), config()->string('dwg-converter.temporary_directory'), 1024, 'layers');
+
+    try {
+        (new SymfonyProcessRunner())->capture(
+            [\PHP_BINARY, '-r', $rejected
+                ? 'fwrite(STDERR, "Unable to read file C:\\private\\drawing.dwg"); exit(1);'
+                : 'fwrite(STDOUT, "private layer names"); fwrite(STDERR, "failed C:\\private\\drawing.dwg private layer names " . str_repeat("x", 65536)); exit(7);'],
+            $workspace,
+            5.0,
+            'layers',
+            'dwglayers',
+            null,
+        );
+    } catch (InvalidDwg|DwgOperationFailed $failure) {
+        expect($failure->reason())->toBe($rejected ? 'libredwg_rejected_input' : 'process_failed')
+            ->and($failure->context()['operation'])->toBe('layers')
+            ->and($failure->context()['stage'])->toBe('dwglayers')
+            ->and(\strlen((string) $failure->context()['stderr']))->toBeLessThanOrEqual(4096)
+            ->and(\json_encode($failure->context()))->not->toContain('drawing.dwg', 'private layer names');
+
+        return;
+    } finally {
+        $workspace->cleanup();
+    }
+
+    throw new RuntimeException('Expected capture failure.');
+})->with([[false], [true]]);
+
+it('maps capture timeout while preserving its original exception', function (): void {
+    $workspace = Workspace::fromSource(DwgBinary::from('AC1032 fixture'), config()->string('dwg-converter.temporary_directory'), 1024, 'layers');
+
+    try {
+        (new SymfonyProcessRunner())->capture([\PHP_BINARY, '-r', 'usleep(500000);'], $workspace, 0.05, 'layers', 'dwglayers', 1024);
+    } catch (DwgOperationFailed $failure) {
+        expect($failure->reason())->toBe('process_timed_out')
+            ->and($failure->getPrevious())->toBeInstanceOf(ProcessTimedOutException::class);
+
+        return;
+    } finally {
+        $workspace->cleanup();
+    }
+
+    throw new RuntimeException('Expected capture timeout.');
 });

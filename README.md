@@ -9,6 +9,7 @@ JPEG, or WebP previews also requires LibreOffice and ImageMagick.
 ## Features
 
 - Extract embedded DWG thumbnails.
+- Read layer names and frozen, off, and locked states.
 - Convert DWG files to ASCII DXF.
 - Export DWG files as structural JSON.
 - Create PNG, JPEG, or WebP previews.
@@ -35,6 +36,7 @@ thumbnails, create DXF, or export JSON.
 | `Dwg::thumbnail(...)->extract()` | LibreDWG `dwgbmp` |
 | `Dwg::toDxf(...)->convert()` | LibreDWG `dwg2dxf` |
 | `Dwg::toJson(...)->convert()` | LibreDWG `dwgread` with JSON output support |
+| `Dwg::layers(...)->read()` | LibreDWG `dwglayers --flags` |
 | `Dwg::toImage(...)->convert()` | LibreDWG `dwg2dxf`, LibreOffice 7.4+ `soffice`, ImageMagick 7 `magick` |
 
 The package does not download or bundle these tools. For LibreDWG installation, see the
@@ -94,7 +96,7 @@ $path = $image->storeAs('drawing-previews', 'floor-plan.webp', 's3');
 Every operation accepts a valid `UploadedFile`, a local absolute path, or bytes explicitly wrapped with
 `DwgBinary::from($bytes)`. A plain string is always treated as a path.
 
-Each successful operation returns a one-time `DwgOutput`:
+Each successful file operation returns a one-time `DwgOutput`:
 
 - `extension()` and `mimeType()` inspect trusted output metadata without consuming it.
 - `storeAs()` streams the artifact to Laravel Storage and then attempts temporary cleanup.

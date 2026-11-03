@@ -7,6 +7,7 @@ return [
         'dwgbmp' => env('LIBREDWG_DWGBMP', 'dwgbmp'),
         'dwg2dxf' => env('LIBREDWG_DWG2DXF', 'dwg2dxf'),
         'dwgread' => env('LIBREDWG_DWGREAD', 'dwgread'),
+        'dwglayers' => env('LIBREDWG_DWGLAYERS', 'dwglayers'),
         'libreoffice' => env('DWG_CONVERTER_LIBREOFFICE', 'soffice'),
         'imagemagick' => env('DWG_CONVERTER_IMAGEMAGICK', 'magick'),
     ],

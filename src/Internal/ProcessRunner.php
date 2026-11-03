@@ -40,4 +40,21 @@ interface ProcessRunner
         string $operation,
         string $stage = 'convert',
     ): void;
+
+    /**
+     * Capture bounded stdout data separately from diagnostic stderr.
+     *
+     * @param  list<string>  $command
+     *
+     * @throws DwgOperationFailed
+     * @throws InvalidDwg
+     */
+    public function capture(
+        array $command,
+        Workspace $workspace,
+        float $timeout,
+        string $operation,
+        string $stage = 'convert',
+        ?int $maxOutputBytes = null,
+    ): string;
 }

@@ -86,6 +86,7 @@ jobs:
       - name: Resolve the selected Laravel compatibility set
         run: >-
           composer update --no-interaction --prefer-dist --with-all-dependencies
+          --with=illuminate/collections:^${{ matrix.laravel }}
           --with=illuminate/filesystem:^${{ matrix.laravel }}
           --with=illuminate/http:^${{ matrix.laravel }}
           --with=illuminate/support:^${{ matrix.laravel }}
@@ -118,4 +119,6 @@ jobs:
           grep -q 'config/' archive-contents.txt
           grep -q 'README.md' archive-contents.txt
           grep -q 'LICENSE' archive-contents.txt
+          grep -qx 'src/DwgLayer.php' archive-contents.txt
+          grep -qx 'src/Operations/LayerReading.php' archive-contents.txt
           ! grep -Eq '(^|/)(\.github|vendor|tests|composer\.lock)(/|$)|\.(exe|dwg)$' archive-contents.txt

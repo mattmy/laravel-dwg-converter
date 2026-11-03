@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Mattmy\DwgConverter\DwgBinary;
+use Mattmy\DwgConverter\DwgLayer;
 use Mattmy\DwgConverter\DxfVersion;
 use Mattmy\DwgConverter\Exceptions\InvalidDwg;
 use Mattmy\DwgConverter\Facades\Dwg;
@@ -20,6 +21,7 @@ $executables = [
     'dwgbmp' => $environment('LIBREDWG_DWGBMP'),
     'dwg2dxf' => $environment('LIBREDWG_DWG2DXF'),
     'dwgread' => $environment('LIBREDWG_DWGREAD'),
+    'dwglayers' => $environment('LIBREDWG_DWGLAYERS'),
     'libreoffice' => $environment('DWG_CONVERTER_LIBREOFFICE'),
     'imagemagick' => $environment('DWG_CONVERTER_IMAGEMAGICK'),
 ];
@@ -27,7 +29,7 @@ $missingIntegrationDependency = $source === ''
     || $imageSource === ''
     || ! \is_file($source)
     || ! \is_file($imageSource);
-foreach ($executables as $executable) {
+foreach (\array_diff_key($executables, ['dwglayers' => true]) as $executable) {
     $missingIntegrationDependency = $missingIntegrationDependency || $executable === '' || ! \is_file($executable);
 }
 $missingLibreDwg = $executables['dwgbmp'] === ''
@@ -41,6 +43,20 @@ $missingJsonDependency = $source === ''
     || $executables['dwgread'] === ''
     || ! \is_file($executables['dwgread']);
 $integrationSkipReason = 'Set DWG_CONVERTER_TEST_DWG, DWG_CONVERTER_TEST_IMAGE_DWG, and all executable environment variables.';
+
+it('reads real layer data and rejects a forged layer source', function () use ($source): void {
+    $layers = Dwg::layers($source)->read();
+    expect($layers)->not->toBeEmpty();
+    foreach ($layers as $layer) {
+        expect($layer)->toBeInstanceOf(DwgLayer::class)
+            ->and($layer->name)->not->toBe('');
+    }
+    expect(fn () => Dwg::layers(DwgBinary::from('AC1032 forged bytes'))->read())
+        ->toThrow(InvalidDwg::class, 'libredwg_rejected_input');
+})->skip(
+    $source === '' || ! \is_file($source) || $executables['dwglayers'] === '' || ! \is_file($executables['dwglayers']),
+    'Set DWG_CONVERTER_TEST_DWG and LIBREDWG_DWGLAYERS.',
+);
 
 beforeEach(function () use ($executables): void {
     config()->set('dwg-converter.executables', $executables);

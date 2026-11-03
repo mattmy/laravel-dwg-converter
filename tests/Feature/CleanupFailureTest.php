@@ -3,9 +3,11 @@
 declare(strict_types=1);
 
 use Illuminate\Http\File;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Mattmy\DwgConverter\DwgBinary;
+use Mattmy\DwgConverter\DwgLayer;
 use Mattmy\DwgConverter\DwgOutput;
 use Mattmy\DwgConverter\Exceptions\DwgOperationFailed;
 use Mattmy\DwgConverter\Exceptions\InvalidDwg;
@@ -173,6 +175,7 @@ it('preserves every conversion failure and its previous exception when cleanup f
             'json' => Dwg::toJson($source)->convert(),
             'image' => Dwg::toImage($source)->convert(),
             'thumbnail' => Dwg::thumbnail($source)->extract(),
+            'layers' => Dwg::layers($source)->read(),
             default => throw new LogicException('Unknown operation.'),
         };
 
@@ -188,7 +191,40 @@ it('preserves every conversion failure and its previous exception when cleanup f
     }
 
     expect($caught)->toBe($primary)->and($caught->getPrevious())->toBe($previous);
-})->with(['dxf', 'json', 'image', 'thumbnail']);
+})->with(['dxf', 'json', 'image', 'thumbnail', 'layers']);
+
+it('returns reusable layers when cleanup or logging fails', function (bool $loggerFails): void {
+    $realWorkspace = null;
+    $log = Log::shouldReceive('warning')->once()->with('DWG converter temporary cleanup failed.', [
+        'operation' => 'layers', 'phase' => 'conversion', 'exception_class' => RuntimeException::class,
+    ]);
+    if ($loggerFails) {
+        $log->andThrow(new RuntimeException('Logger unavailable.'));
+    }
+    app()->instance(ProcessRunner::class, new FakeProcessRunner(static function (array $_command, Workspace $workspace) use (&$realWorkspace): string {
+        $realWorkspace = $workspace;
+        \stream_wrapper_unregister('file');
+        \stream_wrapper_register('file', FailedCleanupStream::class);
+
+        return " + \tname\n";
+    }));
+    // Load the result classes before replacing filesystem access.
+    \class_exists(DwgLayer::class);
+    \class_exists(Collection::class);
+
+    try {
+        $layers = Dwg::layers(DwgBinary::from('AC1032 fixture'))->read();
+    } finally {
+        if ($realWorkspace instanceof Workspace) {
+            \stream_wrapper_restore('file');
+            \clearstatcache();
+            $realWorkspace->cleanup();
+        }
+    }
+    expect($layers->pluck('name')->all())->toBe(['name'])
+        ->and($layers->where('isFrozen', false))->toHaveCount(1)
+        ->and(FailedCleanupStream::$attempts)->toBe(1);
+})->with([[false], [true]]);
 
 it('preserves snapshot rejection when cleanup also fails', function (): void {
     \class_exists(Workspace::class);
