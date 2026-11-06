@@ -6,6 +6,8 @@ use Mattmy\DwgConverter\DwgBinary;
 use Mattmy\DwgConverter\Exceptions\DwgOperationFailed;
 use Mattmy\DwgConverter\Exceptions\InvalidDwg;
 use Mattmy\DwgConverter\Exceptions\LibreDwgUnavailable;
+use Mattmy\DwgConverter\Facades\Dwg;
+use Mattmy\DwgConverter\Internal\ProcessRunner;
 use Mattmy\DwgConverter\Internal\SymfonyProcessRunner;
 use Mattmy\DwgConverter\Internal\Workspace;
 use Symfony\Component\Process\Exception\ProcessTimedOutException;
@@ -340,4 +342,22 @@ it('omits private entity diagnostics on process failure', function (bool $invali
     }
 
     throw new RuntimeException('Expected process failure.');
+})->with([[false], [true]]);
+
+it('requires ON capability only for an ON query', function (bool $supported): void {
+    $executable = capabilityProbeExecutable('dwglayers 0.14', 'Usage: dwglayers --flags' . ($supported ? ' --on' : ''));
+    config()->set('dwg-converter.executables.dwglayers', $executable);
+    app()->instance(ProcessRunner::class, new SymfonyProcessRunner());
+
+    try {
+        expect(Dwg::layers(DwgBinary::from('AC1032 fixture'))->read())->toBeEmpty();
+        if ($supported) {
+            expect(Dwg::layers(DwgBinary::from('AC1032 fixture'))->onlyOn()->read())->toBeEmpty();
+        } else {
+            expect(fn () => Dwg::layers(DwgBinary::from('AC1032 fixture'))->onlyOn()->read())
+                ->toThrow(LibreDwgUnavailable::class, 'unsupported_tool_capability');
+        }
+    } finally {
+        \unlink($executable);
+    }
 })->with([[false], [true]]);

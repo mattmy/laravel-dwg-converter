@@ -23,6 +23,7 @@ interface ProcessRunner
         string $operation,
         ?string $expectedTool = null,
         string $stage = 'convert',
+        ?string $requiredOption = null,
     ): void;
 
     /**

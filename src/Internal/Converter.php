@@ -269,7 +269,7 @@ final class Converter
     }
 
     /**
-     * Read all reported layers without transferring temporary resource ownership.
+     * Read reported layers with optional native ON selection and no resource transfer.
      *
      * @return Collection<int, DwgLayer>
      *
@@ -277,7 +277,7 @@ final class Converter
      * @throws InvalidDwg
      * @throws LibreDwgUnavailable
      */
-    public function layers(UploadedFile|string|DwgBinary $source): Collection
+    public function layers(UploadedFile|string|DwgBinary $source, bool $onlyOn = false): Collection
     {
         $operation = 'layers';
         $configuration = $this->configuration('dwglayers', $operation);
@@ -285,9 +285,14 @@ final class Converter
 
         try {
             $executable = $configuration['executable'];
-            $this->processRunner->assertAvailable($executable, $operation, 'dwglayers', 'dwglayers');
+            $this->processRunner->assertAvailable($executable, $operation, 'dwglayers', 'dwglayers', $onlyOn ? '--on' : null);
+            $command = [$executable, '--flags'];
+            if ($onlyOn) {
+                $command[] = '--on';
+            }
+            $command[] = $workspace->inputPath();
             $stdout = $this->processRunner->capture(
-                [$executable, '--flags', $workspace->inputPath()],
+                $command,
                 $workspace,
                 $configuration['timeout'],
                 $operation,

@@ -6,6 +6,12 @@ All notable changes to this project will be documented in this file. Laravel DWG
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-06
+
+### Added
+
+- Select ON layers with `Dwg::layers($source)->onlyOn()->read()` using native `--on`, excluding off and frozen layers while allowing locked layers. Only this option requires `--on` capability.
+
 ## [0.4.0] - 2026-11-06
 
 ### Added

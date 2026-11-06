@@ -55,6 +55,7 @@ final class FakeProcessRunner implements ProcessRunner
         string $operation,
         ?string $expectedTool = null,
         string $stage = 'convert',
+        ?string $requiredOption = null,
     ): void {
         if ($this->availabilityFailure instanceof LibreDwgUnavailable) {
             throw $this->availabilityFailure;

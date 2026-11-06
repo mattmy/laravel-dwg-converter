@@ -20,7 +20,14 @@ final class LayerReading
     public function __construct(
         private readonly Converter $converter,
         private readonly UploadedFile|string|DwgBinary $source,
+        private readonly bool $onlyOn = false,
     ) {}
+
+    /** Select native ON layers without performing I/O or changing this operation. */
+    public function onlyOn(): self
+    {
+        return new self($this->converter, $this->source, true);
+    }
 
     /**
      * Read reusable layer data and attempt workspace cleanup before returning.
@@ -33,6 +40,6 @@ final class LayerReading
      */
     public function read(): Collection
     {
-        return $this->converter->layers($this->source);
+        return $this->converter->layers($this->source, $this->onlyOn);
     }
 }

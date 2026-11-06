@@ -201,7 +201,7 @@ it('preserves every conversion failure and its previous exception when cleanup f
     expect($caught)->toBe($primary)->and($caught->getPrevious())->toBe($previous);
 })->with(['dxf', 'json', 'image', 'thumbnail', 'layers', 'entities']);
 
-it('returns reusable layers when cleanup or logging fails', function (bool $loggerFails): void {
+it('returns reusable layers when cleanup or logging fails', function (bool $loggerFails, bool $onlyOn): void {
     $realWorkspace = null;
     $log = Log::shouldReceive('warning')->once()->with('DWG converter temporary cleanup failed.', [
         'operation' => 'layers', 'phase' => 'conversion', 'exception_class' => RuntimeException::class,
@@ -221,7 +221,8 @@ it('returns reusable layers when cleanup or logging fails', function (bool $logg
     \class_exists(Collection::class);
 
     try {
-        $layers = Dwg::layers(DwgBinary::from('AC1032 fixture'))->read();
+        $reading = Dwg::layers(DwgBinary::from('AC1032 fixture'));
+        $layers = ($onlyOn ? $reading->onlyOn() : $reading)->read();
     } finally {
         if ($realWorkspace instanceof Workspace) {
             \stream_wrapper_restore('file');
@@ -232,7 +233,7 @@ it('returns reusable layers when cleanup or logging fails', function (bool $logg
     expect($layers->pluck('name')->all())->toBe(['name'])
         ->and($layers->where('isFrozen', false))->toHaveCount(1)
         ->and(FailedCleanupStream::$attempts)->toBe(1);
-})->with([[false], [true]]);
+})->with([[false], [true]])->with([[false], [true]]);
 
 it('returns entity data when cleanup or logging fails', function (bool $loggerFails): void {
     foreach ([EntityParser::class, DwgEntityQueryResult::class, DwgEntityCollection::class,
