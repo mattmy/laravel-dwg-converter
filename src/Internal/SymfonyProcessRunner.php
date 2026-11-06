@@ -39,6 +39,7 @@ final class SymfonyProcessRunner implements ProcessRunner
         string $operation,
         ?string $expectedTool = null,
         string $stage = 'convert',
+        ?string $requiredOption = null,
     ): void {
         if ($executable === '') {
             throw new LibreDwgUnavailable('executable_not_found', $this->context($operation, $stage));
@@ -87,7 +88,8 @@ final class SymfonyProcessRunner implements ProcessRunner
         }
 
         $help = \strtolower($helpProcess->getOutput() . $helpProcess->getErrorOutput());
-        if (! $helpProcess->isSuccessful() || ! $this->hasRequiredCapabilities($expectedTool, $help)) {
+        if (! $helpProcess->isSuccessful() || ! $this->hasRequiredCapabilities($expectedTool, $help)
+            || ($requiredOption !== null && ! \str_contains($help, $requiredOption))) {
             throw new LibreDwgUnavailable('unsupported_tool_capability', [
                 ...$this->context($operation, $stage),
                 'reported_version' => $this->summary($reportedVersion),

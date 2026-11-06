@@ -63,6 +63,8 @@ it('reads real layer data and rejects a forged layer source', function () use ($
         expect($layer)->toBeInstanceOf(DwgLayer::class)
             ->and($layer->name)->not->toBe('');
     }
+    expect(Dwg::layers($source)->onlyOn()->read()->all())
+        ->toEqual($layers->whereStrict('isOff', false)->whereStrict('isFrozen', false)->values()->all());
     expect(fn () => Dwg::layers(DwgBinary::from('AC1032 forged bytes'))->read())
         ->toThrow(InvalidDwg::class, 'libredwg_rejected_input');
 })->skip(
