@@ -4,10 +4,12 @@ declare(strict_types=1);
 
 namespace Mattmy\DwgConverter\Internal;
 
+use ErrorException;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Collection;
 use JsonException;
 use Mattmy\DwgConverter\DwgBinary;
+use Mattmy\DwgConverter\DwgEntityQueryResult;
 use Mattmy\DwgConverter\DwgLayer;
 use Mattmy\DwgConverter\DwgOutput;
 use Mattmy\DwgConverter\DxfVersion;
@@ -300,6 +302,32 @@ final class Converter
     }
 
     /**
+     * Read stored entities without applying the unused byte-limit settings.
+     *
+     * @throws DwgOperationFailed
+     * @throws InvalidDwg
+     * @throws LibreDwgUnavailable
+     */
+    public function entities(UploadedFile|string|DwgBinary $source): DwgEntityQueryResult
+    {
+        $configuration = $this->processConfiguration('dwgread', 'entities');
+        $workspace = Workspace::fromSource($source, $configuration['temporary_directory'], null, 'entities');
+        $output = $workspace->outputPath('drawing.json');
+
+        try {
+            $executable = $configuration['executable'];
+            $this->processRunner->assertAvailable($executable, 'entities', 'dwgread', 'dwgread');
+            $this->processRunner->run([$executable, '-O', 'JSON', '-o', $output, $workspace->inputPath()], $workspace, $configuration['timeout'], 'entities', 'dwgread');
+            $this->assertBoundedFile($output, $workspace, 'entities', null);
+            $contents = $this->readJson($output, 'entities');
+
+            return (new EntityParser())->parse($contents);
+        } finally {
+            $workspace->cleanup('entities', 'conversion');
+        }
+    }
+
+    /**
      * Parse complete UTF-8 flag records without trimming or deduplicating names.
      *
      * @return Collection<int, DwgLayer>
@@ -374,11 +402,25 @@ final class Converter
      */
     private function configuration(string $executableKey, string $operation): array
     {
+        return [
+            ...$this->processConfiguration($executableKey, $operation),
+            'max_input_bytes' => $this->normalizeByteLimit($this->configuration['max_input_bytes'] ?? null, $operation),
+            'max_output_bytes' => $this->normalizeByteLimit($this->configuration['max_output_bytes'] ?? null, $operation),
+        ];
+    }
+
+    /**
+     * Validate only settings used to run a process and prepare its workspace.
+     *
+     * @return array{executable: string, timeout: float, temporary_directory: string}
+     *
+     * @throws LibreDwgUnavailable
+     */
+    private function processConfiguration(string $executableKey, string $operation): array
+    {
         $executables = $this->configuration['executables'] ?? null;
         $executable = \is_array($executables) ? ($executables[$executableKey] ?? null) : null;
         $timeout = $this->configuration['timeout'] ?? null;
-        $maxInputBytes = $this->normalizeByteLimit($this->configuration['max_input_bytes'] ?? null, $operation);
-        $maxOutputBytes = $this->normalizeByteLimit($this->configuration['max_output_bytes'] ?? null, $operation);
         $temporaryDirectory = $this->configuration['temporary_directory'] ?? null;
         $validTimeout = (\is_int($timeout) || \is_float($timeout))
             && \is_finite((float) $timeout)
@@ -397,8 +439,6 @@ final class Converter
         return [
             'executable' => $executable,
             'timeout' => (float) $timeout,
-            'max_input_bytes' => $maxInputBytes,
-            'max_output_bytes' => $maxOutputBytes,
             'temporary_directory' => $temporaryDirectory,
         ];
     }
@@ -802,6 +842,25 @@ final class Converter
     }
 
     /**
+     * Read a checked JSON artifact with stable failure mapping across error handlers.
+     *
+     * @throws DwgOperationFailed
+     */
+    private function readJson(string $path, string $operation): string
+    {
+        try {
+            $contents = \file_get_contents($path);
+        } catch (ErrorException $exception) {
+            throw new DwgOperationFailed($operation . '_invalid', ['operation' => $operation], $exception);
+        }
+        if (! \is_string($contents)) {
+            throw new DwgOperationFailed($operation . '_invalid', ['operation' => $operation]);
+        }
+
+        return $contents;
+    }
+
+    /**
      * Validate a bounded LibreDWG JSON artifact without changing its structure.
      *
      * @throws DwgOperationFailed
@@ -809,10 +868,7 @@ final class Converter
     private function assertJson(string $path, Workspace $workspace, ?int $maxOutputBytes): void
     {
         $this->assertBoundedFile($path, $workspace, 'json', $maxOutputBytes);
-        $contents = \file_get_contents($path);
-        if (! \is_string($contents)) {
-            throw new DwgOperationFailed('json_invalid', ['operation' => 'json']);
-        }
+        $contents = $this->readJson($path, 'json');
 
         try {
             $decoded = \json_decode($contents, flags: \JSON_THROW_ON_ERROR);

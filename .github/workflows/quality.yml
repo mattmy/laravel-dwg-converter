@@ -87,6 +87,7 @@ jobs:
         run: >-
           composer update --no-interaction --prefer-dist --with-all-dependencies
           --with=illuminate/collections:^${{ matrix.laravel }}
+          --with=illuminate/contracts:^${{ matrix.laravel }}
           --with=illuminate/filesystem:^${{ matrix.laravel }}
           --with=illuminate/http:^${{ matrix.laravel }}
           --with=illuminate/support:^${{ matrix.laravel }}
@@ -121,4 +122,9 @@ jobs:
           grep -q 'LICENSE' archive-contents.txt
           grep -qx 'src/DwgLayer.php' archive-contents.txt
           grep -qx 'src/Operations/LayerReading.php' archive-contents.txt
+          grep -qx 'src/DwgEntityQueryResult.php' archive-contents.txt
+          grep -qx 'src/DwgEntityCollection.php' archive-contents.txt
+          grep -qx 'src/DwgEntityType.php' archive-contents.txt
+          grep -qx 'src/Internal/EntityParser.php' archive-contents.txt
+          grep -qx 'src/Operations/EntityReading.php' archive-contents.txt
           ! grep -Eq '(^|/)(\.github|vendor|tests|composer\.lock)(/|$)|\.(exe|dwg)$' archive-contents.txt

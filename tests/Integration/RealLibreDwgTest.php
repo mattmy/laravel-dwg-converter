@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Mattmy\DwgConverter\DwgBinary;
+use Mattmy\DwgConverter\DwgEntity;
 use Mattmy\DwgConverter\DwgLayer;
 use Mattmy\DwgConverter\DxfVersion;
 use Mattmy\DwgConverter\Exceptions\InvalidDwg;
@@ -43,6 +44,17 @@ $missingJsonDependency = $source === ''
     || $executables['dwgread'] === ''
     || ! \is_file($executables['dwgread']);
 $integrationSkipReason = 'Set DWG_CONVERTER_TEST_DWG, DWG_CONVERTER_TEST_IMAGE_DWG, and all executable environment variables.';
+
+it('reads real stored entities and rejects a forged entity source', function () use ($source): void {
+    $result = Dwg::entities($source)->read();
+    expect($result->entities)->not->toBeEmpty();
+    foreach ($result->entities as $entity) {
+        expect($entity)->toBeInstanceOf(DwgEntity::class)
+            ->and($entity->isComplete)->toBe($entity->issues === []);
+    }
+    expect($result->complete()->count() + $result->incomplete()->count())->toBe($result->entities->count())
+        ->and(fn () => Dwg::entities(DwgBinary::from('AC1032 forged bytes'))->read())->toThrow(InvalidDwg::class, 'libredwg_rejected_input');
+})->skip($missingJsonDependency, 'Set DWG_CONVERTER_TEST_DWG and LIBREDWG_DWGREAD.');
 
 it('reads real layer data and rejects a forged layer source', function () use ($source): void {
     $layers = Dwg::layers($source)->read();
