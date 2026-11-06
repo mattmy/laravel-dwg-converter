@@ -12,12 +12,14 @@ use Mattmy\DwgConverter\DwgEntityQueryResult;
 use Mattmy\DwgConverter\DwgEntityType;
 use Mattmy\DwgConverter\DwgInsertGeometry;
 use Mattmy\DwgConverter\DwgLineGeometry;
+use Mattmy\DwgConverter\DwgManager;
 use Mattmy\DwgConverter\DwgOwnerKind;
 use Mattmy\DwgConverter\DwgQueryDiagnosticReason;
 use Mattmy\DwgConverter\Exceptions\DwgOperationFailed;
 use Mattmy\DwgConverter\Exceptions\InvalidDwg;
 use Mattmy\DwgConverter\Exceptions\LibreDwgUnavailable;
 use Mattmy\DwgConverter\Facades\Dwg;
+use Mattmy\DwgConverter\Internal\Converter;
 use Mattmy\DwgConverter\Internal\ProcessRunner;
 use Mattmy\DwgConverter\Tests\Fakes\FakeProcessRunner;
 use Symfony\Component\Process\Process;
@@ -712,4 +714,120 @@ it('stops actual linked attribute cycles while retaining the available prefix', 
     expect(collect($entity?->attributes)->pluck('handle')->all())->toBe(['4'])
         ->and(collect($entity?->issues)->whereStrict('field', 'attributes')->pluck('reason')->all())
         ->toBe([DwgEntityIssueReason::REFERENCE_CYCLE]);
+});
+
+it('selects layers before materializing entities while retaining source diagnostics', function (array $arguments, array $handles): void {
+    $runner = FakeProcessRunner::writesFile('drawing.json', nativeEntityDump([
+        nativeEntity(),
+        ['object' => 'LAYER', 'handle' => [0, 1, 6], 'name' => 'Other'],
+        nativeEntity(['handle' => [0, 1, 4], 'layer' => [5, 1, 6, 6], 'entity' => 'HATCH']),
+        nativeEntity(['handle' => [0, 1, 5], 'layer' => null]), null, (object) [],
+    ]));
+    app()->instance(ProcessRunner::class, $runner);
+    $reading = Dwg::entities(DwgBinary::from('AC1032 fixture'));
+    $first = $arguments[0] ?? [];
+    if (! \is_string($first) && ! \is_array($first)) {
+        throw new RuntimeException('Invalid test input.');
+    }
+    $rest = [];
+    foreach (\array_slice($arguments, 1) as $argument) {
+        if (! \is_string($argument)) {
+            throw new RuntimeException('Invalid additional layer.');
+        }
+        $rest[] = $argument;
+    }
+    $selected = $reading->onlyLayers($first, ...$rest);
+    expect($runner->commands)->toBe([]);
+    $full = $reading->read();
+    $result = $selected->read();
+    $names = [];
+    foreach ($arguments as $argument) {
+        $names = [...$names, ...(\is_array($argument) ? $argument : [$argument])];
+    }
+    $expected = $full->entities->filter(static fn ($entity): bool => \in_array($entity->layer->name, $names, true))->values();
+    expect($result->entities->pluck('handle')->all())->toBe($handles)
+        ->and($result->entities->all())->toEqual($expected->all())
+        ->and($result->diagnostics)->toEqual($full->diagnostics)
+        ->and($result->drawingUnits)->toEqual($full->drawingUnits)
+        ->and($result->entities->keys()->all())->toBe($handles === [] ? [] : \range(0, \count($handles) - 1))
+        ->and($result->complete()->count() + $result->incomplete()->count())->toBe(\count($handles))
+        ->and($runner->commands)->toHaveCount(2);
+    expect($selected->onlyLayers('Other')->read()->entities->pluck('handle')->all())->toBe(['4'])
+        ->and($selected->read()->entities->pluck('handle')->all())->toBe($handles)
+        ->and($reading->read()->entities)->toHaveCount(3);
+})->with([
+    [[' 圖層 '], ['3']], [[' 圖層 ', 'Other'], ['3', '4']],
+    [[[' 圖層 ', 'Other']], ['3', '4']], [[[' 圖層 '], 'Other'], ['3', '4']],
+    [['Other', 'Other'], ['4']], [[[]], []], [['圖層'], []], [['other'], []], [[''], []], [['*'], []],
+]);
+
+it('rejects invalid layer lists before I/O', function (array $layers): void {
+    $runner = FakeProcessRunner::writesFile('drawing.json', nativeEntityDump([]));
+    app()->instance(ProcessRunner::class, $runner);
+    expect(fn () => Dwg::entities(DwgBinary::from('invalid'))->onlyLayers($layers))->toThrow(InvalidArgumentException::class)
+        ->and($runner->commands)->toBe([]);
+})->with([[[1]], [[null]], [[['nested']]], [['name' => 'Other']], [[1 => 'Other']]]);
+
+it('retains cross-layer attributes and owner chains without adding their entities', function (): void {
+    app()->instance(ProcessRunner::class, FakeProcessRunner::writesFile('drawing.json', nativeEntityDump([
+        ['object' => 'LAYER', 'handle' => [0, 1, 6], 'name' => 'Other'],
+        nativeEntity(['entity' => 'INSERT', 'entmode' => 0, 'ownerhandle' => [4, 1, 5, 5],
+            'block_header' => [5, 1, 2, 2], 'has_attribs' => 1, 'num_owned' => 1, 'attribs' => [[4, 1, 4, 4]],
+            'ins_pt' => [0, 0, 0], 'scale' => [1, 1, 1], 'rotation' => 0, 'extrusion' => [0, 0, 1]]),
+        nativeEntity(['entity' => 'ATTRIB', 'handle' => [0, 1, 4], 'layer' => [5, 1, 6, 6],
+            'ownerhandle' => [4, 1, 3, 3], 'tag' => 'TAG', 'text_value' => '001']),
+        nativeEntity(['handle' => [0, 1, 5], 'layer' => [5, 1, 6, 6]]),
+    ])));
+    $entity = Dwg::entities(DwgBinary::from('AC1032 fixture'))->onlyLayers(' 圖層 ')->read()->entities->sole();
+    expect(collect($entity->attributes)->pluck('value')->all())->toBe(['001'])->and($entity->owner->directHandle)->toBe('5')
+        ->and($entity->owner->containerHandle)->toBe('2')->and($entity->isComplete)->toBeTrue();
+});
+
+it('retains excluded duplicate identities and selects distinct layers with equal names', function (): void {
+    app()->instance(ProcessRunner::class, FakeProcessRunner::writesFile('drawing.json', nativeEntityDump([
+        ['object' => 'LAYER', 'handle' => [0, 1, 6], 'name' => ' 圖層 '],
+        nativeEntity(), nativeEntity(['layer' => null]),
+        nativeEntity(['handle' => [0, 1, 4], 'layer' => [5, 1, 6, 6]]),
+    ])));
+    $result = Dwg::entities(DwgBinary::from('AC1032 fixture'))->onlyLayers(' 圖層 ')->read();
+    expect($result->entities->pluck('handle')->all())->toBe(['3', '4'])
+        ->and($result->withIssue(DwgEntityIssueReason::DUPLICATE_HANDLE))->toHaveCount(1);
+});
+
+it('validates the whole query even with an empty layer selection', function (string $json): void {
+    app()->instance(ProcessRunner::class, FakeProcessRunner::writesFile('drawing.json', $json));
+    expect(fn () => Dwg::entities(DwgBinary::from('AC1032 fixture'))->onlyLayers([])->read())->toThrow(DwgOperationFailed::class);
+})->with(['{}', '{"OBJECTS":{}}', 'broken']);
+
+it('does not select unresolved layer targets', function (string $fault): void {
+    $target = ['object' => 'LAYER', 'handle' => [0, 1, 6], 'name' => 'Other'];
+    $records = [nativeEntity(['layer' => [5, 1, 6, 6]])];
+    if ($fault !== 'missing') {
+        if ($fault === 'wrong') {
+            $target['object'] = 'BLOCK_HEADER';
+        }
+        if ($fault === 'name') {
+            $target['name'] = null;
+        }
+        $records[] = $target;
+        if ($fault === 'ambiguous') {
+            $records[] = $target;
+        }
+    }
+    app()->instance(ProcessRunner::class, FakeProcessRunner::writesFile('drawing.json', nativeEntityDump($records)));
+    expect(Dwg::entities(DwgBinary::from('AC1032 fixture'))->onlyLayers('Other')->read()->entities)->toBeEmpty();
+})->with(['missing', 'wrong', 'name', 'ambiguous']);
+
+it('still validates sources and process failures with an empty layer selection', function (): void {
+    $runner = FakeProcessRunner::writesFile('drawing.json', nativeEntityDump([]));
+    app()->instance(ProcessRunner::class, $runner);
+    expect(fn () => Dwg::entities(DwgBinary::from('invalid'))->onlyLayers([])->read())->toThrow(InvalidDwg::class)
+        ->and($runner->commands)->toBe([]);
+    app()->instance(ProcessRunner::class, new FakeProcessRunner(static function (): never {
+        throw new DwgOperationFailed('process_timed_out', ['operation' => 'entities']);
+    }));
+    app()->forgetInstance(DwgManager::class);
+    app()->forgetInstance(Converter::class);
+    Dwg::clearResolvedInstances();
+    expect(fn () => Dwg::entities(DwgBinary::from('AC1032 fixture'))->onlyLayers([])->read())->toThrow(DwgOperationFailed::class, 'process_timed_out');
 });

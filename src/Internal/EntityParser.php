@@ -49,9 +49,11 @@ final class EntityParser
     /**
      * Decode once, preserving JSON object/array identity and unsigned handles.
      *
+     * @param  list<string>|null  $layers
+     *
      * @throws DwgOperationFailed
      */
-    public function parse(string $contents): DwgEntityQueryResult
+    public function parse(string $contents, ?array $layers = null): DwgEntityQueryResult
     {
         try {
             $data = \json_decode($contents, flags: \JSON_THROW_ON_ERROR | \JSON_BIGINT_AS_STRING);
@@ -79,7 +81,17 @@ final class EntityParser
             if (! $record instanceof stdClass) {
                 $reason = Diagnostic::NON_OBJECT_RECORDS;
             } elseif ($kind === 'entity') {
-                $entities[] = $this->entity($record);
+                $layer = null;
+                if ($layers !== null) {
+                    $this->issues = [];
+                    [$layerHandle, $target] = $this->reference($record->layer ?? null, 'layer', 'LAYER');
+                    $name = $target->name ?? null;
+                    if (! \is_string($name) || $name === '' || ! \in_array($name, $layers, true)) {
+                        continue;
+                    }
+                    $layer = new DwgLayerReference($layerHandle, $name);
+                }
+                $entities[] = $this->entity($record, $layer);
 
                 continue;
             } elseif ($kind === 'object') {
@@ -126,7 +138,7 @@ final class EntityParser
     }
 
     /** Normalize one confirmed entity, preserving partial data and source order. */
-    private function entity(stdClass $record): DwgEntity
+    private function entity(stdClass $record, ?DwgLayerReference $layer = null): DwgEntity
     {
         $this->issues = [];
         $type = $this->requiredText($record, 'entity', 'type', false);
@@ -140,8 +152,10 @@ final class EntityParser
         } elseif (\count($this->index['h' . $handle] ?? []) > 1) {
             $this->issue(Issue::DUPLICATE_HANDLE, 'handle');
         }
-        [$layerHandle, $layer] = $this->reference($record->layer ?? null, 'layer', 'LAYER');
-        $layerName = $layer === null ? null : $this->requiredText($layer, 'name', 'layer.name', false);
+        if ($layer === null) {
+            [$layerHandle, $target] = $this->reference($record->layer ?? null, 'layer', 'LAYER');
+            $layer = new DwgLayerReference($layerHandle, $target === null ? null : $this->requiredText($target, 'name', 'layer.name', false));
+        }
         $owner = $this->owner($record);
         $block = null;
         $attributes = null;
@@ -153,7 +167,7 @@ final class EntityParser
         $color = $this->color($record->color ?? null);
         $geometry = $this->geometry($record, $type);
 
-        return new DwgEntity($type, $handle, new DwgLayerReference($layerHandle, $layerName), $owner, $geometry, $color, $block, $attributes, $this->issues === [], $this->issues);
+        return new DwgEntity($type, $handle, $layer, $owner, $geometry, $color, $block, $attributes, $this->issues === [], $this->issues);
     }
 
     /** Follow explicit owner links without imposing an arbitrary chain depth. */

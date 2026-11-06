@@ -304,11 +304,13 @@ final class Converter
     /**
      * Read stored entities without applying the unused byte-limit settings.
      *
+     * @param  list<string>|null  $layers
+     *
      * @throws DwgOperationFailed
      * @throws InvalidDwg
      * @throws LibreDwgUnavailable
      */
-    public function entities(UploadedFile|string|DwgBinary $source): DwgEntityQueryResult
+    public function entities(UploadedFile|string|DwgBinary $source, ?array $layers = null): DwgEntityQueryResult
     {
         $configuration = $this->processConfiguration('dwgread', 'entities');
         $workspace = Workspace::fromSource($source, $configuration['temporary_directory'], null, 'entities');
@@ -321,7 +323,7 @@ final class Converter
             $this->assertBoundedFile($output, $workspace, 'entities', null);
             $contents = $this->readJson($output, 'entities');
 
-            return (new EntityParser())->parse($contents);
+            return (new EntityParser())->parse($contents, $layers);
         } finally {
             $workspace->cleanup('entities', 'conversion');
         }
