@@ -192,7 +192,7 @@ final class SymfonyProcessRunner implements ProcessRunner
                 ...$this->context($operation, $stage),
                 'exit_code' => $process->getExitCode(),
                 // Omit layer diagnostics because they may contain names that cannot be reliably redacted.
-                'stderr' => $operation === 'layers' ? '[diagnostic omitted]' : $this->summary($stderr),
+                'stderr' => \in_array($operation, ['layers', 'entities'], true) ? '[diagnostic omitted]' : $this->summary($stderr),
             ];
             if (($operation !== 'image' || $stage === 'dwg2dxf') && $this->isRejectedInput($stderr)) {
                 throw new InvalidDwg('libredwg_rejected_input', $context);
@@ -210,6 +210,9 @@ final class SymfonyProcessRunner implements ProcessRunner
     private function isRejectedInput(string $stderr): bool
     {
         $stderr = \strtolower($stderr);
+        if (\preg_match('/(?:^|\R)error 0x800(?:\R|$)/', $stderr) === 1) {
+            return true;
+        }
 
         foreach (['unable to read file', 'read error', 'failed to decode', 'dwg too small', 'invalid dwg'] as $indicator) {
             if (\str_contains($stderr, $indicator)) {

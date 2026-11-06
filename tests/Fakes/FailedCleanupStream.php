@@ -22,9 +22,13 @@ final class FailedCleanupStream
 
     public static string $snapshotFailure = '';
 
+    public static string $jsonReadFailure = '';
+
     public static ?string $sourcePath = null;
 
     public static int $closedInputs = 0;
+
+    public static string $readContents = 'artifact';
 
     private bool $isSource = false;
 
@@ -41,7 +45,7 @@ final class FailedCleanupStream
 
         // Synthetic paths must stay readable regardless of the runner's UID/GID.
         return self::$exists
-            ? ['mode' => $path === self::$sourcePath || \str_ends_with($path, '.dxf') || \str_ends_with($path, '/residue') ? 0100666 : 0040777, 'size' => 8]
+            ? ['mode' => $path === self::$sourcePath || \str_ends_with($path, '.dxf') || \str_ends_with($path, '.json') || \str_ends_with($path, '/residue') ? 0100666 : 0040777, 'size' => \strlen(self::$readContents)]
             : false;
     }
 
@@ -74,12 +78,19 @@ final class FailedCleanupStream
     /** Fail a synthetic directory removal. */
     public function rmdir(string $path, int $options): bool
     {
-        return $this->fail();
+        return self::$failureMethod === 'none' ? true : $this->fail();
     }
 
     /** Provide readable bytes for successful delivery before cleanup fails. */
     public function stream_open(string $path, string $mode, int $options, ?string &$openedPath): bool
     {
+        if (\str_ends_with($path, '.json') && self::$jsonReadFailure !== '') {
+            if (self::$jsonReadFailure === 'warning') {
+                \trigger_error('Private C:/drawings/customer.json read failure.', \E_USER_WARNING);
+            }
+
+            return false;
+        }
         $this->isSource = \str_replace('\\', '/', $path) === self::$sourcePath;
         if (self::$snapshotFailure === 'open' && \str_contains($mode, 'b') && $mode !== 'rb') {
             \trigger_error('Synthetic snapshot open failure.', \E_USER_WARNING);
@@ -125,7 +136,7 @@ final class FailedCleanupStream
     /** Read the synthetic artifact without touching a real source file. */
     public function stream_read(int $count): string
     {
-        $contents = \substr('artifact', $this->position, $count);
+        $contents = \substr(self::$readContents, $this->position, $count);
         $this->position += \strlen($contents);
 
         return $contents;
@@ -134,7 +145,7 @@ final class FailedCleanupStream
     /** Report the end of the synthetic artifact. */
     public function stream_eof(): bool
     {
-        return $this->position >= 8;
+        return $this->position >= \strlen(self::$readContents);
     }
 
     /**
@@ -144,7 +155,7 @@ final class FailedCleanupStream
      */
     public function stream_stat(): array
     {
-        return ['mode' => 0100666, 'size' => 8];
+        return ['mode' => 0100666, 'size' => \strlen(self::$readContents)];
     }
 
     /** Emit a deterministic filesystem failure containing private diagnostic text. */

@@ -7,11 +7,16 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Mattmy\DwgConverter\DwgBinary;
+use Mattmy\DwgConverter\DwgDrawingUnits;
+use Mattmy\DwgConverter\DwgDrawingUnitStatus;
+use Mattmy\DwgConverter\DwgEntityCollection;
+use Mattmy\DwgConverter\DwgEntityQueryResult;
 use Mattmy\DwgConverter\DwgLayer;
 use Mattmy\DwgConverter\DwgOutput;
 use Mattmy\DwgConverter\Exceptions\DwgOperationFailed;
 use Mattmy\DwgConverter\Exceptions\InvalidDwg;
 use Mattmy\DwgConverter\Facades\Dwg;
+use Mattmy\DwgConverter\Internal\EntityParser;
 use Mattmy\DwgConverter\Internal\ProcessRunner;
 use Mattmy\DwgConverter\Internal\Workspace;
 use Mattmy\DwgConverter\Tests\Fakes\FailedCleanupStream;
@@ -26,6 +31,7 @@ beforeEach(function (): void {
     FailedCleanupStream::$attempts = 0;
     FailedCleanupStream::$failureMethod = 'scandir';
     FailedCleanupStream::$failureMode = 'exception';
+    FailedCleanupStream::$readContents = 'artifact';
     if (\in_array('cleanupfailure', \stream_get_wrappers(), true)) {
         \stream_wrapper_unregister('cleanupfailure');
     }
@@ -37,6 +43,7 @@ afterEach(function (): void {
     FailedCleanupStream::$exists = true;
     FailedCleanupStream::$failureMethod = 'scandir';
     FailedCleanupStream::$failureMode = 'exception';
+    FailedCleanupStream::$readContents = 'artifact';
     \clearstatcache();
 });
 
@@ -176,6 +183,7 @@ it('preserves every conversion failure and its previous exception when cleanup f
             'image' => Dwg::toImage($source)->convert(),
             'thumbnail' => Dwg::thumbnail($source)->extract(),
             'layers' => Dwg::layers($source)->read(),
+            'entities' => Dwg::entities($source)->read(),
             default => throw new LogicException('Unknown operation.'),
         };
 
@@ -191,7 +199,7 @@ it('preserves every conversion failure and its previous exception when cleanup f
     }
 
     expect($caught)->toBe($primary)->and($caught->getPrevious())->toBe($previous);
-})->with(['dxf', 'json', 'image', 'thumbnail', 'layers']);
+})->with(['dxf', 'json', 'image', 'thumbnail', 'layers', 'entities']);
 
 it('returns reusable layers when cleanup or logging fails', function (bool $loggerFails): void {
     $realWorkspace = null;
@@ -226,6 +234,38 @@ it('returns reusable layers when cleanup or logging fails', function (bool $logg
         ->and(FailedCleanupStream::$attempts)->toBe(1);
 })->with([[false], [true]]);
 
+it('returns entity data when cleanup or logging fails', function (bool $loggerFails): void {
+    foreach ([EntityParser::class, DwgEntityQueryResult::class, DwgEntityCollection::class,
+        DwgDrawingUnits::class, DwgDrawingUnitStatus::class, Collection::class] as $class) {
+        \class_exists($class);
+    }
+    FailedCleanupStream::$readContents = '{"HEADER":{"INSUNITS":0},"OBJECTS":[]}';
+    $log = Log::shouldReceive('warning')->once()->with('DWG converter temporary cleanup failed.', [
+        'operation' => 'entities', 'phase' => 'conversion', 'exception_class' => RuntimeException::class,
+    ]);
+    if ($loggerFails) {
+        $log->andThrow(new RuntimeException('Logger unavailable.'));
+    }
+    $workspace = null;
+    app()->instance(ProcessRunner::class, new FakeProcessRunner(static function (array $_command, Workspace $current) use (&$workspace): void {
+        $workspace = $current;
+        \file_put_contents($current->outputPath('drawing.json'), FailedCleanupStream::$readContents);
+        \stream_wrapper_unregister('file');
+        \stream_wrapper_register('file', FailedCleanupStream::class);
+    }));
+
+    try {
+        $result = Dwg::entities(DwgBinary::from('AC1032 fixture'))->read();
+    } finally {
+        if ($workspace instanceof Workspace) {
+            \stream_wrapper_restore('file');
+            \clearstatcache();
+            $workspace->cleanup();
+        }
+    }
+    expect($result->entities)->toBeEmpty()->and(FailedCleanupStream::$attempts)->toBe(1);
+})->with([[false], [true]]);
+
 it('preserves snapshot rejection when cleanup also fails', function (): void {
     \class_exists(Workspace::class);
     \class_exists(InvalidDwg::class);
@@ -250,3 +290,60 @@ it('preserves snapshot rejection when cleanup also fails', function (): void {
     expect($caught?->reason())->toBe('invalid_dwg_header')
         ->and(FailedCleanupStream::$attempts)->toBe(1);
 });
+
+it('maps JSON artifact read failures and preserves their primary exception through cleanup', function (string $operation, bool $warning, bool $cleanupFails): void {
+    $previous = $warning ? new ErrorException('Private C:/drawings/customer.json read failure.') : null;
+    FailedCleanupStream::$jsonReadFailure = $warning ? 'warning' : 'false';
+    FailedCleanupStream::$failureMethod = $cleanupFails ? 'scandir' : 'none';
+    if ($cleanupFails) {
+        Log::shouldReceive('warning')->once();
+    } else {
+        Log::shouldReceive('warning')->never();
+    }
+    $workspace = null;
+    app()->instance(ProcessRunner::class, new FakeProcessRunner(static function (array $_command, Workspace $current) use (&$workspace): void {
+        $workspace = $current;
+        \file_put_contents($current->outputPath('drawing.json'), '{}');
+        \stream_wrapper_unregister('file');
+        \stream_wrapper_register('file', FailedCleanupStream::class);
+    }));
+    // The false case models hosts that do not turn filesystem warnings into exceptions.
+    \set_error_handler(static function () use ($previous): bool {
+        if ($previous !== null) {
+            throw $previous;
+        }
+
+        return true;
+    });
+    $failure = null;
+
+    try {
+        if ($operation === 'entities') {
+            Dwg::entities(DwgBinary::from('AC1032 fixture'))->read();
+        } else {
+            Dwg::toJson(DwgBinary::from('AC1032 fixture'))->convert();
+        }
+    } catch (DwgOperationFailed $exception) {
+        $failure = $exception;
+    } finally {
+        \restore_error_handler();
+        FailedCleanupStream::$jsonReadFailure = '';
+        if ($workspace instanceof Workspace) {
+            \stream_wrapper_restore('file');
+            \clearstatcache();
+            // Successful synthetic removal leaves real fixture files for test-only disposal.
+            if ($cleanupFails) {
+                $workspace->cleanup();
+            } else {
+                \unlink($workspace->outputPath('drawing.json'));
+                \unlink($workspace->inputPath());
+                \rmdir($workspace->directory());
+            }
+        }
+    }
+    expect($failure)->toBeInstanceOf(DwgOperationFailed::class)
+        ->and($failure?->reason())->toBe($operation . '_invalid')
+        ->and($failure?->context())->toBe(['operation' => $operation])
+        ->and($failure?->getPrevious())->toBe($previous)
+        ->and(FailedCleanupStream::$attempts)->toBe($cleanupFails ? 1 : 0);
+})->with(['entities', 'json'])->with([[false], [true]])->with([[false], [true]]);

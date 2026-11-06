@@ -324,3 +324,20 @@ it('maps capture timeout while preserving its original exception', function (): 
 
     throw new RuntimeException('Expected capture timeout.');
 });
+
+it('omits private entity diagnostics on process failure', function (bool $invalid): void {
+    $workspace = Workspace::fromSource(DwgBinary::from('AC1032 fixture'), config()->string('dwg-converter.temporary_directory'), null, 'entities');
+
+    try {
+        (new SymfonyProcessRunner())->run([\PHP_BINARY, '-r', $invalid ? 'fwrite(STDERR, "ERROR 0x800\n"); exit(7);' : 'fwrite(STDERR, "private block and attribute names"); exit(7);'], $workspace, 5.0, 'entities', 'dwgread');
+    } catch (DwgOperationFailed|InvalidDwg $failure) {
+        expect($failure->context())->toBe(['operation' => 'entities', 'stage' => 'dwgread', 'exit_code' => 7, 'stderr' => '[diagnostic omitted]'])
+            ->and($failure->reason())->toBe($invalid ? 'libredwg_rejected_input' : 'process_failed');
+
+        return;
+    } finally {
+        $workspace->cleanup('entities');
+    }
+
+    throw new RuntimeException('Expected process failure.');
+})->with([[false], [true]]);

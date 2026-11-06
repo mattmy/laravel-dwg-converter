@@ -7,6 +7,7 @@ namespace Mattmy\DwgConverter;
 use Illuminate\Http\UploadedFile;
 use Mattmy\DwgConverter\Internal\Converter;
 use Mattmy\DwgConverter\Operations\DxfConversion;
+use Mattmy\DwgConverter\Operations\EntityReading;
 use Mattmy\DwgConverter\Operations\ImageConversion;
 use Mattmy\DwgConverter\Operations\JsonConversion;
 use Mattmy\DwgConverter\Operations\LayerReading;
@@ -15,12 +16,14 @@ use Mattmy\DwgConverter\Operations\ThumbnailExtraction;
 /**
  * Creates stateless operation objects for the DWG facade.
  */
-final class DwgManager
+final readonly class DwgManager
 {
     /**
      * Create a manager backed by the shared internal converter.
      */
-    public function __construct(private readonly Converter $converter) {}
+    public function __construct(
+        private Converter $converter,
+    ) {}
 
     /**
      * Start an immutable DWG to DXF conversion.
@@ -58,5 +61,11 @@ final class DwgManager
     public function layers(UploadedFile|string|DwgBinary $source): LayerReading
     {
         return new LayerReading($this->converter, $source);
+    }
+
+    /** Bind a source for an independent stored-entity query. */
+    public function entities(UploadedFile|string|DwgBinary $source): EntityReading
+    {
+        return new EntityReading($this->converter, $source);
     }
 }
