@@ -6,6 +6,20 @@ All notable changes to this project will be documented in this file. Laravel DWG
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-06
+
+### Added
+
+- Read entity data with `Dwg::entities($source)->read()`, including LINE, CIRCLE, ARC, and INSERT geometry, layers, owners, colors, block references, attributes, and drawing units.
+- Chain filters by type, layer, owner kind, target block, color mode, parsing completeness, and issue reason using `DwgEntityCollection` and Laravel collection methods.
+- Read one or more selected layers with `onlyLayers()`, reducing parsing work for excluded entities while preserving cross-layer relationships.
+- Inspect partial data through per-entity issues and query diagnostics. Counts represent stored records across model space, layouts, and block definitions; block instances are not expanded. Entity queries load the full JSON and do not apply the configured file-size limits.
+
+### Fixed
+
+- Report JSON artifact read failures as `DwgOperationFailed` with `json_invalid` or `entities_invalid`, preserving the underlying exception when available.
+- Report LibreDWG's standalone `ERROR 0x800` decode rejection as `InvalidDwg` instead of a generic process failure.
+
 ## [0.3.0] - 2026-11-03
 
 ### Added
@@ -69,7 +83,8 @@ All notable changes to this project will be documented in this file. Laravel DWG
 - Add `Dwg::toJson($source)->convert()` for validated LibreDWG structural JSON output.
 - Allow missing, null, zero, and negative byte-limit settings to disable their respective limits.
 
-[Unreleased]: https://github.com/mattmy/laravel-dwg-converter/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/mattmy/laravel-dwg-converter/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/mattmy/laravel-dwg-converter/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/mattmy/laravel-dwg-converter/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/mattmy/laravel-dwg-converter/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/mattmy/laravel-dwg-converter/compare/v0.1.2...v0.2.0

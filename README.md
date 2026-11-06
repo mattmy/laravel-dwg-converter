@@ -10,6 +10,7 @@ JPEG, or WebP previews also requires LibreOffice and ImageMagick.
 
 - Extract embedded DWG thumbnails.
 - Read layer names and frozen, off, and locked states.
+- Read, filter, and count entity data
 - Convert DWG files to ASCII DXF.
 - Export DWG files as structural JSON.
 - Create PNG, JPEG, or WebP previews.
@@ -37,6 +38,7 @@ thumbnails, create DXF, or export JSON.
 | `Dwg::toDxf(...)->convert()` | LibreDWG `dwg2dxf` |
 | `Dwg::toJson(...)->convert()` | LibreDWG `dwgread` with JSON output support |
 | `Dwg::layers(...)->read()` | LibreDWG `dwglayers --flags` |
+| `Dwg::entities(...)->read()` | LibreDWG `dwgread` with JSON output support |
 | `Dwg::toImage(...)->convert()` | LibreDWG `dwg2dxf`, LibreOffice 7.4+ `soffice`, ImageMagick 7 `magick` |
 
 The package does not download or bundle these tools. For LibreDWG installation, see the

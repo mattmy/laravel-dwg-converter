@@ -10,6 +10,7 @@ Laravel DWG Converter 將 LibreDWG 命令列工具整合至 Laravel 應用，
 
 - 擷取 DWG 內嵌縮圖。
 - 查詢圖層名稱與凍結、關閉、鎖定狀態。
+- 讀取、篩選與統計圖元資料
 - 將 DWG 轉換為 ASCII DXF。
 - 將 DWG 輸出為結構 JSON。
 - 建立 PNG、JPEG 或 WebP 預覽。
@@ -37,6 +38,7 @@ ImageMagick。
 | `Dwg::toDxf(...)->convert()` | LibreDWG `dwg2dxf` |
 | `Dwg::toJson(...)->convert()` | 具 JSON output 能力的 LibreDWG `dwgread` |
 | `Dwg::layers(...)->read()` | LibreDWG `dwglayers --flags` |
+| `Dwg::entities(...)->read()` | 支援 JSON 輸出的 LibreDWG `dwgread` |
 | `Dwg::toImage(...)->convert()` | LibreDWG `dwg2dxf`、LibreOffice 7.4+ `soffice`、ImageMagick 7 `magick` |
 
 本套件不會下載或附帶這些工具。LibreDWG 安裝方式請參考
