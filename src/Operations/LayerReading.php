@@ -16,7 +16,11 @@ use Mattmy\DwgConverter\Internal\Converter;
 /** Reads layer data from one bound DWG source. */
 final class LayerReading
 {
-    /** Bind a source without performing I/O. */
+    /**
+     * Bind a source without performing I/O.
+     *
+     * @internal Create layer readings through Dwg::layers().
+     */
     public function __construct(
         private readonly Converter $converter,
         private readonly UploadedFile|string|DwgBinary $source,

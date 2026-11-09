@@ -49,13 +49,17 @@ it('accepts a bounded ASCII DXF whose EOF follows a large entities section', fun
         ->and($output->output())->toBe($contents);
 });
 
-it('rejects a malformed DXF artifact', function (): void {
-    $runner = FakeProcessRunner::writesFile('output.dxf', "0\nSECTION\n");
+it('rejects a malformed DXF artifact', function (string $contents): void {
+    $runner = FakeProcessRunner::writesFile('output.dxf', $contents);
     app()->instance(ProcessRunner::class, $runner);
 
     expect(fn () => Dwg::toDxf(DwgBinary::from('AC1032 drawing'))->convert())
         ->toThrow(DwgOperationFailed::class, 'dxf_invalid');
-});
+})->with([
+    'truncated section' => ["0\nSECTION\n"],
+    'ordinary group value named SECTION' => ["1\nSECTION\n0\nEOF\n"],
+    'section missing a name' => ["0\nSECTION\n2\n\n0\nEOF\n"],
+]);
 
 it('uses an absolute source path stem when no storage name is provided', function (): void {
     $temporary = \tempnam(\sys_get_temp_dir(), 'dwg-source-');

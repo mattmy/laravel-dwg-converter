@@ -6,6 +6,23 @@ All notable changes to this project will be documented in this file. Laravel DWG
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-11-09
+
+### Fixed
+
+- Match complete CLI option names and preserve their case during capability checks. For example, `--online` no longer satisfies `--on`, and `dwgread -O` no longer satisfies `-o`.
+- Report unrelated tool diagnostics such as `Thread error` as process failures rather than invalid DWG input.
+- Report artifact read failures from `DwgOutput::output()` as `output_missing` and preserve the underlying exception when available.
+- Reject ASCII DXF artifacts without a valid named section opening and PNG previews whose IHDR and IEND chunks overlap.
+- Preserve literal backslashes in Unix paths when building LibreOffice profile URLs.
+- Count entity and object markers that are indistinguishable from oversized JSON integers as unclassifiable records, while preserving unsigned handle precision.
+
+### Changed
+
+- Release the raw JSON after decoding an entity query, before indexing records and building the result.
+- Remove the 32,768-pixel per-axis limit for image previews. Output format, positive dimensions, and file-size checks still apply.
+- Clarify that `Dwg::layers()` is the supported entry point for creating a layer reading. The `LayerReading` constructor is marked internal and retains its existing signature.
+
 ## [0.5.0] - 2026-11-06
 
 ### Added
@@ -89,7 +106,9 @@ All notable changes to this project will be documented in this file. Laravel DWG
 - Add `Dwg::toJson($source)->convert()` for validated LibreDWG structural JSON output.
 - Allow missing, null, zero, and negative byte-limit settings to disable their respective limits.
 
-[Unreleased]: https://github.com/mattmy/laravel-dwg-converter/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/mattmy/laravel-dwg-converter/compare/v0.5.1...HEAD
+[0.5.1]: https://github.com/mattmy/laravel-dwg-converter/compare/v0.5.0...v0.5.1
+[0.5.0]: https://github.com/mattmy/laravel-dwg-converter/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/mattmy/laravel-dwg-converter/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/mattmy/laravel-dwg-converter/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/mattmy/laravel-dwg-converter/compare/v0.2.0...v0.2.1

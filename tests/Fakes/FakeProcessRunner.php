@@ -8,6 +8,7 @@ use Closure;
 use Mattmy\DwgConverter\Exceptions\LibreDwgUnavailable;
 use Mattmy\DwgConverter\Internal\ProcessRunner;
 use Mattmy\DwgConverter\Internal\Workspace;
+use RuntimeException;
 
 /**
  * Supplies deterministic LibreDWG process behavior to public Interface tests.
@@ -21,6 +22,8 @@ final class FakeProcessRunner implements ProcessRunner
     public array $inputSnapshots = [];
 
     /**
+     * Configure the process callback and any capability failure.
+     *
      * @param  Closure(list<string>, Workspace, float, string): (void|string)  $run
      */
     public function __construct(
@@ -40,7 +43,7 @@ final class FakeProcessRunner implements ProcessRunner
             string $_operation,
         ) use ($name, $contents): void {
             if (\file_put_contents($workspace->outputPath($name), $contents) === false) {
-                throw new \RuntimeException('Unable to write a fake process output.');
+                throw new RuntimeException('Unable to write a fake process output.');
             }
         });
     }
@@ -74,18 +77,7 @@ final class FakeProcessRunner implements ProcessRunner
         string $operation,
         string $stage = 'convert',
     ): void {
-        $this->commands[] = $command;
-        $snapshot = \file_get_contents($workspace->inputPath());
-        if (! \is_string($snapshot)) {
-            throw new \RuntimeException('Unable to read the package input snapshot.');
-        }
-        $this->inputSnapshots[] = $snapshot;
-        ($this->run)(
-            $command,
-            $workspace,
-            $timeout,
-            $operation,
-        );
+        $this->recordAndRun($command, $workspace, $timeout, $operation);
     }
 
     /**
@@ -101,17 +93,29 @@ final class FakeProcessRunner implements ProcessRunner
         string $stage = 'convert',
         ?int $maxOutputBytes = null,
     ): string {
-        $this->commands[] = $command;
-        $snapshot = \file_get_contents($workspace->inputPath());
-        if (! \is_string($snapshot)) {
-            throw new \RuntimeException('Unable to read the package input snapshot.');
-        }
-        $this->inputSnapshots[] = $snapshot;
-        $stdout = ($this->run)($command, $workspace, $timeout, $operation);
-        if (! \is_string($stdout)) {
-            throw new \RuntimeException('The fake query must return stdout.');
+        $stdout = $this->recordAndRun($command, $workspace, $timeout, $operation);
+        if ($stdout === null) {
+            throw new RuntimeException('The fake query must return stdout.');
         }
 
         return $stdout;
+    }
+
+    /**
+     * Record the command and its input snapshot before running the callback.
+     *
+     * @param  list<string>  $command
+     */
+    private function recordAndRun(array $command, Workspace $workspace, float $timeout, string $operation): ?string
+    {
+        $this->commands[] = $command;
+        $snapshot = \file_get_contents($workspace->inputPath());
+        if (! \is_string($snapshot)) {
+            throw new RuntimeException('Unable to read the package input snapshot.');
+        }
+        $this->inputSnapshots[] = $snapshot;
+        $stdout = ($this->run)($command, $workspace, $timeout, $operation);
+
+        return \is_string($stdout) ? $stdout : null;
     }
 }

@@ -41,7 +41,7 @@ ImageMagick。
 | `Dwg::entities(...)->read()` | 支援 JSON 輸出的 LibreDWG `dwgread` |
 | `Dwg::toImage(...)->convert()` | LibreDWG `dwg2dxf`、LibreOffice 7.4+ `soffice`、ImageMagick 7 `magick` |
 
-本套件不會下載或附帶這些工具。LibreDWG 安裝方式請參考
+請使用仍受維護且包含最新安全修補的 LibreDWG 版本。本套件不會下載或附帶這些工具。LibreDWG 安裝方式請參考
 [LibreDWG 官方 repository](https://github.com/libredwg/libredwg)。
 [外部工具指南](https://mattmy.github.io/laravel-dwg-converter-doc/zh-TW/guide/external-tools)提供
 Ubuntu／Debian、RHEL／Fedora 與 Windows 的 LibreOffice、ImageMagick 安裝方式。
@@ -92,6 +92,8 @@ $image = Dwg::toImage(storage_path('app/private/floor-plan.dwg'))
 $path = $image->storeAs('drawing-previews', 'floor-plan.webp', 's3');
 ```
 
+圖片轉換會盡可能呈現整個模型空間，不會自動拆分多張圖，也不保證圖紙空間、視埠、字型或外部參考的呈現保真。
+
 ## 輸入與輸出
 
 每個操作都接受有效的 `UploadedFile`、local absolute path，或以 `DwgBinary::from($bytes)` 明確包裝的
@@ -112,7 +114,7 @@ bytes。普通 string 一律視為 path。
 失敗時會拋出 `LibreDwgUnavailable`、`InvalidDwg` 或 `DwgOperationFailed`。每個例外都提供穩定的
 `reason()` 與去敏後的 scalar `context()`。
 
-預設上限為 200 MiB 輸入、512 MiB 一般輸出及 64 MiB JSON 輸出。將 byte limit 設為 `null`、零或
+檔案操作與圖層查詢依各自適用的上限執行，預設為 200 MiB 輸入、512 MiB 一般輸出及 64 MiB JSON 輸出。將 byte limit 設為 `null`、零或
 負整數即可停用。處理不可信 DWG 時，應保留正整數上限，並在有限制資源的 worker 或 container
 執行轉換。
 

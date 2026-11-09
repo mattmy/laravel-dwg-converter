@@ -18,6 +18,7 @@ use Mattmy\DwgConverter\Exceptions\InvalidDwg;
 use Mattmy\DwgConverter\Exceptions\LibreDwgUnavailable;
 use Mattmy\DwgConverter\ImageFormat;
 use Mattmy\DwgConverter\ImageResolution;
+use Throwable;
 
 /**
  * Implements the fixed LibreDWG operations behind the public builders.
@@ -26,11 +27,11 @@ final class Converter
 {
     private const PNG_SIGNATURE_BYTES = 8;
 
-    private const PNG_IHDR_BYTES = 24;
-
-    private const MAX_IMAGE_DIMENSION = 32_768;
+    private const PNG_IHDR_END_OFFSET = 33;
 
     /**
+     * Use the shared runner and the package configuration for each operation.
+     *
      * @param  array<string, mixed>  $configuration
      */
     public function __construct(
@@ -66,7 +67,7 @@ final class Converter
             [$extension, $mimeType] = $this->thumbnailType($thumbnail, $workspace, $configuration['max_output_bytes']);
 
             return new DwgOutput($workspace, $thumbnail, $extension, $mimeType, $configuration['max_output_bytes'], $operation, $sourceStem);
-        } catch (\Throwable $exception) {
+        } catch (Throwable $exception) {
             $workspace->cleanup($operation, 'conversion');
 
             throw $exception;
@@ -109,7 +110,7 @@ final class Converter
             $this->assertDxf($output);
 
             return new DwgOutput($workspace, $output, 'dxf', 'image/vnd.dxf', $configuration['max_output_bytes'], $operation, $sourceStem);
-        } catch (\Throwable $exception) {
+        } catch (Throwable $exception) {
             $workspace->cleanup($operation, 'conversion');
 
             throw $exception;
@@ -152,7 +153,7 @@ final class Converter
                 $operation,
                 $sourceStem,
             );
-        } catch (\Throwable $exception) {
+        } catch (Throwable $exception) {
             $workspace->cleanup($operation, 'conversion');
 
             throw $exception;
@@ -261,7 +262,7 @@ final class Converter
                 $operation,
                 $sourceStem,
             );
-        } catch (\Throwable $exception) {
+        } catch (Throwable $exception) {
             $workspace->cleanup($operation, 'conversion');
 
             throw $exception;
@@ -326,9 +327,8 @@ final class Converter
             $this->processRunner->assertAvailable($executable, 'entities', 'dwgread', 'dwgread');
             $this->processRunner->run([$executable, '-O', 'JSON', '-o', $output, $workspace->inputPath()], $workspace, $configuration['timeout'], 'entities', 'dwgread');
             $this->assertBoundedFile($output, $workspace, 'entities', null);
-            $contents = $this->readJson($output, 'entities');
 
-            return (new EntityParser())->parse($contents, $layers);
+            return (new EntityParser())->parse($this->readJson($output, 'entities'), $layers);
         } finally {
             $workspace->cleanup('entities', 'conversion');
         }
@@ -840,7 +840,7 @@ final class Converter
         $isDxf = \is_string($head)
             && \is_string($tail)
             && ! \str_contains($head, "\0")
-            && \preg_match('/(?:^|\R)SECTION(?:\R|$)/', $head) === 1
+            && \preg_match('/(?:^|\R)\h*0\h*\RSECTION\R\h*2\h*\R\h*\S[^\r\n]*\R/', $head) === 1
             && \preg_match('/(?:^|\R)\s*0\REOF\s*$/', $tail) === 1;
 
         if (! $isDxf) {
@@ -919,8 +919,6 @@ final class Converter
             || ($image['type'] ?? 0) !== $expectedType
             || $width < 1
             || $height < 1
-            || $width > self::MAX_IMAGE_DIMENSION
-            || $height > self::MAX_IMAGE_DIMENSION
         ) {
             throw new DwgOperationFailed('image_invalid', ['operation' => $operation]);
         }
@@ -931,10 +929,12 @@ final class Converter
      */
     private function isPng(string $path, int $size): bool
     {
-        $header = \file_get_contents($path, false, null, 0, self::PNG_IHDR_BYTES);
+        if ($size < self::PNG_IHDR_END_OFFSET + 12) {
+            return false;
+        }
+        $header = \file_get_contents($path, false, null, 0, self::PNG_IHDR_END_OFFSET);
 
-        return $size >= self::PNG_IHDR_BYTES + 12
-            && \is_string($header)
+        return \is_string($header)
             && \substr($header, 0, self::PNG_SIGNATURE_BYTES) === "\x89PNG\r\n\x1a\n"
             && \substr($header, 8, 8) === "\0\0\0\rIHDR"
             && $this->hasPngEnd($path, $size);
@@ -1015,13 +1015,14 @@ final class Converter
      */
     private function fileUrl(string $path): string
     {
-        $segments = \explode('/', \ltrim(\str_replace('\\', '/', $path), '/'));
-        if (\preg_match('/^[A-Za-z]:$/', $segments[0]) === 1) {
-            $drive = \array_shift($segments);
-
-            return 'file:///' . $drive . '/' . \implode('/', \array_map(\rawurlencode(...), $segments));
+        $url = 'file:///';
+        if (\DIRECTORY_SEPARATOR === '\\') {
+            $path = \str_replace('\\', '/', $path);
+            [$drive, $path] = \explode('/', $path, 2);
+            $url .= $drive . '/';
         }
+        $segments = \explode('/', \ltrim($path, '/'));
 
-        return 'file:///' . \implode('/', \array_map(\rawurlencode(...), $segments));
+        return $url . \implode('/', \array_map(\rawurlencode(...), $segments));
     }
 }

@@ -41,7 +41,8 @@ thumbnails, create DXF, or export JSON.
 | `Dwg::entities(...)->read()` | LibreDWG `dwgread` with JSON output support |
 | `Dwg::toImage(...)->convert()` | LibreDWG `dwg2dxf`, LibreOffice 7.4+ `soffice`, ImageMagick 7 `magick` |
 
-The package does not download or bundle these tools. For LibreDWG installation, see the
+Use a maintained LibreDWG build with the latest security fixes. The package does not download or
+bundle these tools. For LibreDWG installation, see the
 [official LibreDWG repository](https://github.com/libredwg/libredwg). The
 [external tools guide](https://mattmy.github.io/laravel-dwg-converter-doc/guide/external-tools) covers
 LibreOffice and ImageMagick installation on Ubuntu/Debian, RHEL/Fedora, and Windows.
@@ -93,6 +94,9 @@ $image = Dwg::toImage(storage_path('app/private/floor-plan.dwg'))
 $path = $image->storeAs('drawing-previews', 'floor-plan.webp', 's3');
 ```
 
+Image conversion renders a best-effort preview of the entire model space. It does not split multiple
+drawings or guarantee paper-space, viewport, font, or external reference fidelity.
+
 ## Inputs and outputs
 
 Every operation accepts a valid `UploadedFile`, a local absolute path, or bytes explicitly wrapped with
@@ -114,7 +118,8 @@ Logger failures also leave the operation's result or original exception unchange
 Failures use `LibreDwgUnavailable`, `InvalidDwg`, or `DwgOperationFailed`. Each exception provides a stable
 `reason()` and sanitized scalar `context()`.
 
-The default limits are 200 MiB input, 512 MiB general output, and 64 MiB JSON output. Set a byte limit to
+The applicable defaults for file operations and layer queries are 200 MiB input, 512 MiB general
+output, and 64 MiB JSON output. Set a byte limit to
 `null`, zero, or a negative integer to disable it. Keep positive limits and run untrusted DWG conversions in
 a resource-limited worker or container.
 

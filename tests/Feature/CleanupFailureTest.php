@@ -292,7 +292,10 @@ it('preserves snapshot rejection when cleanup also fails', function (): void {
         ->and(FailedCleanupStream::$attempts)->toBe(1);
 });
 
-it('maps JSON artifact read failures and preserves their primary exception through cleanup', function (string $operation, bool $warning, bool $cleanupFails): void {
+it('maps artifact read failures and preserves their primary exception through cleanup', function (string $operation, bool $warning, bool $cleanupFails): void {
+    // The fault-injection wrapper replaces file access, including Composer autoloading.
+    \class_exists(DwgOperationFailed::class);
+    \class_exists(EntityParser::class);
     $previous = $warning ? new ErrorException('Private C:/drawings/customer.json read failure.') : null;
     FailedCleanupStream::$jsonReadFailure = $warning ? 'warning' : 'false';
     FailedCleanupStream::$failureMethod = $cleanupFails ? 'scandir' : 'none';
@@ -302,12 +305,16 @@ it('maps JSON artifact read failures and preserves their primary exception throu
         Log::shouldReceive('warning')->never();
     }
     $workspace = null;
-    app()->instance(ProcessRunner::class, new FakeProcessRunner(static function (array $_command, Workspace $current) use (&$workspace): void {
+    app()->instance(ProcessRunner::class, new FakeProcessRunner(static function (array $_command, Workspace $current) use (&$workspace, $operation): void {
         $workspace = $current;
         \file_put_contents($current->outputPath('drawing.json'), '{}');
-        \stream_wrapper_unregister('file');
-        \stream_wrapper_register('file', FailedCleanupStream::class);
+        if ($operation !== 'output') {
+            \stream_wrapper_unregister('file');
+            \stream_wrapper_register('file', FailedCleanupStream::class);
+        }
     }));
+    $source = DwgBinary::from('AC1032 fixture');
+    $output = $operation === 'output' ? Dwg::toJson($source)->convert() : null;
     // The false case models hosts that do not turn filesystem warnings into exceptions.
     \set_error_handler(static function () use ($previous): bool {
         if ($previous !== null) {
@@ -319,10 +326,14 @@ it('maps JSON artifact read failures and preserves their primary exception throu
     $failure = null;
 
     try {
-        if ($operation === 'entities') {
-            Dwg::entities(DwgBinary::from('AC1032 fixture'))->read();
+        if ($output !== null) {
+            \stream_wrapper_unregister('file');
+            \stream_wrapper_register('file', FailedCleanupStream::class);
+            $output->output();
+        } elseif ($operation === 'entities') {
+            Dwg::entities($source)->read();
         } else {
-            Dwg::toJson(DwgBinary::from('AC1032 fixture'))->convert();
+            Dwg::toJson($source)->convert();
         }
     } catch (DwgOperationFailed $exception) {
         $failure = $exception;
@@ -343,8 +354,11 @@ it('maps JSON artifact read failures and preserves their primary exception throu
         }
     }
     expect($failure)->toBeInstanceOf(DwgOperationFailed::class)
-        ->and($failure?->reason())->toBe($operation . '_invalid')
-        ->and($failure?->context())->toBe(['operation' => $operation])
+        ->and($failure?->reason())->toBe($operation === 'output' ? 'output_missing' : $operation . '_invalid')
+        ->and($failure?->context())->toBe(['operation' => $operation === 'output' ? 'json' : $operation])
         ->and($failure?->getPrevious())->toBe($previous)
         ->and(FailedCleanupStream::$attempts)->toBe($cleanupFails ? 1 : 0);
-})->with(['entities', 'json'])->with([[false], [true]])->with([[false], [true]]);
+    if ($output !== null) {
+        expect(fn () => $output->output())->toThrow(LogicException::class);
+    }
+})->with(['entities', 'json', 'output'])->with([[false], [true]])->with([[false], [true]]);
