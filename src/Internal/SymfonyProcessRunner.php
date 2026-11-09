@@ -7,8 +7,10 @@ namespace Mattmy\DwgConverter\Internal;
 use Mattmy\DwgConverter\Exceptions\DwgOperationFailed;
 use Mattmy\DwgConverter\Exceptions\InvalidDwg;
 use Mattmy\DwgConverter\Exceptions\LibreDwgUnavailable;
+use RuntimeException;
 use Symfony\Component\Process\Exception\ProcessTimedOutException;
 use Symfony\Component\Process\Process;
+use Throwable;
 
 /**
  * Runs external conversion commands through Symfony Process.
@@ -49,7 +51,7 @@ final class SymfonyProcessRunner implements ProcessRunner
 
         try {
             $process = $this->probe($executable, '--version', self::CAPABILITY_PROBE_TIMEOUT);
-        } catch (\Throwable $exception) {
+        } catch (Throwable $exception) {
             throw new LibreDwgUnavailable('executable_not_found', $this->context($operation, $stage), $exception);
         }
 
@@ -76,20 +78,20 @@ final class SymfonyProcessRunner implements ProcessRunner
 
         try {
             if ($remainingTimeout <= 0) {
-                throw new \RuntimeException('Capability probe timeout exhausted.');
+                throw new RuntimeException('Capability probe timeout exhausted.');
             }
 
             $helpProcess = $this->probe($executable, '--help', $remainingTimeout);
-        } catch (\Throwable $exception) {
+        } catch (Throwable $exception) {
             throw new LibreDwgUnavailable('unsupported_tool_capability', [
                 ...$this->context($operation, $stage),
                 'reported_version' => $this->summary($reportedVersion),
             ], $exception);
         }
 
-        $help = \strtolower($helpProcess->getOutput() . $helpProcess->getErrorOutput());
+        $help = $helpProcess->getOutput() . $helpProcess->getErrorOutput();
         if (! $helpProcess->isSuccessful() || ! $this->hasRequiredCapabilities($expectedTool, $help)
-            || ($requiredOption !== null && ! \str_contains($help, $requiredOption))) {
+            || ($requiredOption !== null && ! $this->hasCapability($help, $requiredOption))) {
             throw new LibreDwgUnavailable('unsupported_tool_capability', [
                 ...$this->context($operation, $stage),
                 'reported_version' => $this->summary($reportedVersion),
@@ -177,7 +179,7 @@ final class SymfonyProcessRunner implements ProcessRunner
             });
         } catch (ProcessTimedOutException $exception) {
             throw new DwgOperationFailed('process_timed_out', $this->context($operation, $stage), $exception);
-        } catch (\Throwable $exception) {
+        } catch (Throwable $exception) {
             if ($exception instanceof DwgOperationFailed) {
                 throw $exception;
             }
@@ -216,13 +218,7 @@ final class SymfonyProcessRunner implements ProcessRunner
             return true;
         }
 
-        foreach (['unable to read file', 'read error', 'failed to decode', 'dwg too small', 'invalid dwg'] as $indicator) {
-            if (\str_contains($stderr, $indicator)) {
-                return true;
-            }
-        }
-
-        return false;
+        return \preg_match('/\b(?:unable to read file|read error|failed to decode|dwg too small|invalid dwg)\b/', $stderr) === 1;
     }
 
     /**
@@ -253,12 +249,26 @@ final class SymfonyProcessRunner implements ProcessRunner
     private function hasRequiredCapabilities(string $tool, string $help): bool
     {
         foreach (self::REQUIRED_CAPABILITIES[$tool] ?? [] as $capability) {
-            if (! \str_contains($help, $capability)) {
+            if (! $this->hasCapability($help, $capability)) {
                 return false;
             }
         }
 
         return isset(self::REQUIRED_CAPABILITIES[$tool]);
+    }
+
+    /**
+     * Match CLI options exactly and descriptive help text case-insensitively.
+     */
+    private function hasCapability(string $help, string $capability): bool
+    {
+        if (! \str_starts_with($capability, '-')) {
+            return \stripos($help, $capability) !== false;
+        }
+
+        $option = \preg_quote($capability, '/');
+
+        return \preg_match("/(?<![A-Za-z0-9_-]){$option}(?![A-Za-z0-9_-])/", $help) === 1;
     }
 
     /**

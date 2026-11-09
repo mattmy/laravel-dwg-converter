@@ -14,6 +14,8 @@ use Throwable;
 trait HasFailureContext
 {
     /**
+     * Attach a stable reason and sanitized context to the failure.
+     *
      * @param  array<string, bool|float|int|string|null>  $context
      */
     public function __construct(

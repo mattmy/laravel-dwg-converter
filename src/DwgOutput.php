@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Mattmy\DwgConverter;
 
+use ErrorException;
 use Illuminate\Http\File;
 use Illuminate\Support\Facades\Storage;
 use LogicException;
@@ -119,6 +120,8 @@ final class DwgOutput
             }
 
             return $contents;
+        } catch (ErrorException $exception) {
+            throw new DwgOperationFailed('output_missing', ['operation' => $this->operation], $exception);
         } finally {
             $this->finishConsumption();
         }

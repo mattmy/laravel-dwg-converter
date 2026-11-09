@@ -288,7 +288,7 @@ it('maps capture exit failures and keeps bounded path-free stderr', function (bo
         (new SymfonyProcessRunner())->capture(
             [\PHP_BINARY, '-r', $rejected
                 ? 'fwrite(STDERR, "Unable to read file C:\\private\\drawing.dwg"); exit(1);'
-                : 'fwrite(STDOUT, "private layer names"); fwrite(STDERR, "failed C:\\private\\drawing.dwg private layer names " . str_repeat("x", 65536)); exit(7);'],
+                : 'fwrite(STDOUT, "private layer names"); fwrite(STDERR, "Thread error: failed C:\\private\\drawing.dwg private layer names " . str_repeat("x", 65536)); exit(7);'],
             $workspace,
             5.0,
             'layers',
@@ -344,8 +344,8 @@ it('omits private entity diagnostics on process failure', function (bool $invali
     throw new RuntimeException('Expected process failure.');
 })->with([[false], [true]]);
 
-it('requires ON capability only for an ON query', function (bool $supported): void {
-    $executable = capabilityProbeExecutable('dwglayers 0.14', 'Usage: dwglayers --flags' . ($supported ? ' --on' : ''));
+it('requires ON capability only for an ON query', function (string $options, bool $supported): void {
+    $executable = capabilityProbeExecutable('dwglayers 0.14', 'Usage: dwglayers ' . $options);
     config()->set('dwg-converter.executables.dwglayers', $executable);
     app()->instance(ProcessRunner::class, new SymfonyProcessRunner());
 
@@ -360,4 +360,22 @@ it('requires ON capability only for an ON query', function (bool $supported): vo
     } finally {
         \unlink($executable);
     }
-})->with([[false], [true]]);
+})->with([
+    'absent' => ['--flags', false],
+    'longer option names' => ['--flags --online --on-extra', false],
+    'advertised with aliases' => ['-f, --flags -o, --on', true],
+]);
+
+it('rejects help that only advertises a lookalike for a required option', function (string $tool, string $help): void {
+    $executable = capabilityProbeExecutable($tool . ' 0.14', $help);
+
+    try {
+        expect(fn () => (new SymfonyProcessRunner())->assertAvailable($executable, $tool, $tool, $tool))
+            ->toThrow(LibreDwgUnavailable::class, 'unsupported_tool_capability');
+    } finally {
+        \unlink($executable);
+    }
+})->with([
+    'longer flag name' => ['dwglayers', 'Usage: dwglayers --flags-extra DWGFILE'],
+    'different short option' => ['dwgread', 'Usage: dwgread -O fmt, --format fmt JSON DWGFILE'],
+]);

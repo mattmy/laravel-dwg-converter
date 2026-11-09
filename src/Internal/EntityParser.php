@@ -60,6 +60,7 @@ final class EntityParser
         } catch (JsonException $exception) {
             throw new DwgOperationFailed('entities_invalid', ['operation' => 'entities'], $exception);
         }
+        unset($contents);
         if (! $data instanceof stdClass || ! \is_array($data->OBJECTS ?? null)) {
             throw new DwgOperationFailed('entities_invalid', ['operation' => 'entities']);
         }
@@ -131,10 +132,19 @@ final class EntityParser
     private function classifyRecord(stdClass $record): ?string
     {
         return match (true) {
-            ! \property_exists($record, 'object') && \is_string($record->entity ?? null) => 'entity',
-            ! \property_exists($record, 'entity') && \is_string($record->object ?? null) && $record->object !== '' => 'object',
+            ! \property_exists($record, 'object') && \is_string($record->entity ?? null)
+                && ! $this->isBigIntegerMarker($record->entity) => 'entity',
+            ! \property_exists($record, 'entity') && \is_string($record->object ?? null)
+                && $record->object !== '' && ! $this->isBigIntegerMarker($record->object) => 'object',
             default => null,
         };
+    }
+
+    /** Detect strings indistinguishable from JSON integers outside PHP's int range. */
+    private function isBigIntegerMarker(string $marker): bool
+    {
+        return \preg_match('/^-?[1-9][0-9]*$/D', $marker) === 1
+            && (string) (int) $marker !== $marker;
     }
 
     /** Normalize one confirmed entity, preserving partial data and source order. */

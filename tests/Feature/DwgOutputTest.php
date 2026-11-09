@@ -164,7 +164,7 @@ it('appends or normalizes the trusted output extension for an explicit storage n
 it('uses the default Laravel disk when no disk is named', function (): void {
     Storage::fake('local');
     config()->set('filesystems.default', 'local');
-    $contents = "0\nSECTION\n0\nEOF\n";
+    $contents = "0\nSECTION\n2\nENTITIES\n0\nENDSEC\n0\nEOF\n";
     $runner = FakeProcessRunner::writesFile('output.dxf', $contents);
     app()->instance(ProcessRunner::class, $runner);
 
@@ -176,7 +176,7 @@ it('uses the default Laravel disk when no disk is named', function (): void {
 });
 
 it('cleans an output abandoned before consumption', function (): void {
-    $runner = FakeProcessRunner::writesFile('output.dxf', "0\nSECTION\n0\nEOF\n");
+    $runner = FakeProcessRunner::writesFile('output.dxf', "0\nSECTION\n2\nENTITIES\n0\nENDSEC\n0\nEOF\n");
     app()->instance(ProcessRunner::class, $runner);
 
     $output = Dwg::toDxf(DwgBinary::from('AC1032 drawing'))->convert();

@@ -12,12 +12,7 @@ use Mattmy\DwgConverter\ImageResolution;
 use Mattmy\DwgConverter\Internal\ProcessRunner;
 use Mattmy\DwgConverter\Internal\Workspace;
 use Mattmy\DwgConverter\Tests\Fakes\FakeProcessRunner;
-
-/** Build a structurally complete PNG with the requested dimensions. */
-function pngFixture(int $width = 16, int $height = 12): string
-{
-    return "\x89PNG\r\n\x1a\n\0\0\0\rIHDR" . \pack('N2', $width, $height) . "\x08\x02\0\0\0" . \str_repeat("\0", 4) . "IEND\xaeB`\x82";
-}
+use Mattmy\DwgConverter\Tests\Fakes\ThumbnailFixture;
 
 /** Build a minimal JPEG carrying a baseline frame size. */
 function jpegFixture(int $width = 16, int $height = 12): string
@@ -38,7 +33,7 @@ function webpFixture(int $width = 16, int $height = 12): string
 function imageFixture(ImageFormat $format): string
 {
     return match ($format) {
-        ImageFormat::PNG => pngFixture(),
+        ImageFormat::PNG => ThumbnailFixture::png(),
         ImageFormat::JPEG => jpegFixture(),
         ImageFormat::WEBP => webpFixture(),
     };
@@ -125,6 +120,26 @@ it('converts a DWG through the default PNG image pipeline', function (): void {
             'png:draw_png_Export:{"PixelHeight":{"type":"long","value":"5792"},"PixelWidth":{"type":"long","value":"4096"}}',
         )
         ->and($runner->commands[2])->toContain('-fuzz', '2%', '-trim', '+repage');
+});
+
+it('encodes the LibreOffice profile URL without changing directory names', function (): void {
+    $windows = \DIRECTORY_SEPARATOR === '\\';
+    $directory = config()->string('dwg-converter.temporary_directory') . ($windows ? ' preview#' : '\\preview#');
+    config()->set('dwg-converter.temporary_directory', $directory);
+    $runner = successfulImageRunner();
+    app()->instance(ProcessRunner::class, $runner);
+
+    try {
+        Dwg::toImage(DwgBinary::from('AC1032 drawing'))->convert()->output();
+
+        expect($runner->commands[1][1])->toStartWith('-env:UserInstallation=file:///')
+            ->toContain($windows ? '%20preview%23/' : '%5Cpreview%23/')
+            ->toEndWith('/libreoffice-profile');
+    } finally {
+        if (\is_dir($directory)) {
+            \rmdir($directory);
+        }
+    }
 });
 
 it('uses each supported image format throughout the raster pipeline', function (ImageFormat $format, string $extension, string $mimeType, string $filter): void {
@@ -222,11 +237,11 @@ it('stops the image pipeline when LibreOffice produces no preview', function ():
         ->and($runner->commands)->toHaveCount(2);
 });
 
-it('rejects an image preview with unsafe dimensions', function (): void {
+it('rejects an image preview with a zero dimension', function (): void {
     $runner = new FakeProcessRunner(static function (array $command, Workspace $workspace): void {
         match ($command[0]) {
             'dwg2dxf' => \file_put_contents($workspace->outputPath('drawing.dxf'), "0\nSECTION\n2\nENTITIES\n0\nENDSEC\n0\nEOF\n"),
-            'soffice' => \file_put_contents($workspace->outputPath('drawing.png'), pngFixture(0, 12)),
+            'soffice' => \file_put_contents($workspace->outputPath('drawing.png'), \substr_replace(ThumbnailFixture::png(), "\0\0\0\0", 16, 4)),
             default => null,
         };
     });
@@ -235,6 +250,21 @@ it('rejects an image preview with unsafe dimensions', function (): void {
     expect(fn () => Dwg::toImage(DwgBinary::from('AC1032 drawing'))->convert())
         ->toThrow(DwgOperationFailed::class, 'image_invalid')
         ->and($runner->commands)->toHaveCount(2);
+});
+
+it('accepts positive image dimensions above the former pixel limit', function (): void {
+    $contents = webpFixture(32_769, 32_769);
+    app()->instance(ProcessRunner::class, new FakeProcessRunner(static function (array $command, Workspace $workspace) use ($contents): void {
+        match ($command[0]) {
+            'dwg2dxf' => \file_put_contents($workspace->outputPath('drawing.dxf'), "0\nSECTION\n2\nENTITIES\n0\nENDSEC\n0\nEOF\n"),
+            'soffice' => \file_put_contents($workspace->outputPath('drawing.webp'), $contents),
+            'magick' => \file_put_contents(lastCommandArgument($command), $contents),
+            default => throw new RuntimeException('Unexpected image conversion command.'),
+        };
+    }));
+
+    expect(Dwg::toImage(DwgBinary::from('AC1032 drawing'))->format(ImageFormat::WEBP)->convert()->output())
+        ->toBe($contents);
 });
 
 it('rejects malformed final images', function (ImageFormat $format, string $contents): void {
@@ -252,8 +282,15 @@ it('rejects malformed final images', function (ImageFormat $format, string $cont
 
     expect(fn () => Dwg::toImage(DwgBinary::from('AC1032 drawing'))->format($format)->convert())
         ->toThrow(DwgOperationFailed::class, 'image_invalid');
-})->with(\array_map(static fn (ImageFormat $format): array => [$format], ImageFormat::cases()))
-    ->with(['invalid signature' => ['not an image'], 'truncated header' => ['R']]);
+})->with([
+    'PNG signature' => [ImageFormat::PNG, 'not an image'],
+    'PNG truncated header' => [ImageFormat::PNG, 'R'],
+    'PNG overlapping IHDR and IEND' => [ImageFormat::PNG, \substr(ThumbnailFixture::png(), 0, 29) . \substr(ThumbnailFixture::png(), -12)],
+    'JPEG signature' => [ImageFormat::JPEG, 'not an image'],
+    'JPEG truncated header' => [ImageFormat::JPEG, 'R'],
+    'WebP signature' => [ImageFormat::WEBP, 'not an image'],
+    'WebP truncated header' => [ImageFormat::WEBP, 'R'],
+]);
 
 it('uses a random stem for binary sources when no storage name is provided', function (): void {
     Storage::fake('exports');

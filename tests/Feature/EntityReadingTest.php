@@ -225,6 +225,33 @@ it('separates non-entities, non-objects, unclassifiable records and unsupported 
         ->and($diagnostics->get('unclassifiable_records')?->recordCount)->toBe(2);
 });
 
+it('classifies ambiguous oversized integer markers as unclassifiable records', function (): void {
+    $json = <<<'JSON'
+        {"HEADER":{"INSUNITS":0},"OBJECTS":[
+            {"entity":9223372036854775808},
+            {"entity":"9223372036854775808"},
+            {"object":9223372036854775808},
+            {"object":"9223372036854775808"},
+            {"entity":-9223372036854775809},
+            {"entity":"-9223372036854775809"},
+            {"object":-9223372036854775809},
+            {"object":"-9223372036854775809"},
+            {"entity":"42","handle":[0,1,1]},
+            {"object":"42"}
+        ]}
+        JSON;
+    app()->instance(ProcessRunner::class, FakeProcessRunner::writesFile('drawing.json', $json));
+
+    $result = Dwg::entities(DwgBinary::from('AC1032 fixture'))->read();
+    $entity = $result->entities->sole();
+    $diagnostics = collect($result->diagnostics)->keyBy(static fn ($item): string => $item->reason->value);
+
+    expect($entity->handle)->toBe('1')
+        ->and($entity->type)->toBeNull()
+        ->and($diagnostics->get('unclassifiable_records')?->recordCount)->toBe(8)
+        ->and($diagnostics->get('non_entity_records')?->recordCount)->toBe(1);
+});
+
 it('rejects invalid whole-query structure without returning partial data', function (string $json): void {
     app()->instance(ProcessRunner::class, FakeProcessRunner::writesFile('drawing.json', $json));
     expect(fn () => Dwg::entities(DwgBinary::from('AC1032 fixture'))->read())->toThrow(DwgOperationFailed::class, 'entities_invalid');
@@ -456,7 +483,7 @@ it('does not follow an unclassifiable owner record', function (mixed $marker): v
         ->and($entity->isComplete)->toBeFalse()
         ->and(collect($entity->issues)->pluck('reason')->all())->toContain(DwgEntityIssueReason::WRONG_TARGET_TYPE)
         ->and(collect($result->diagnostics)->pluck('reason')->all())->toContain(DwgQueryDiagnosticReason::UNCLASSIFIABLE_RECORDS);
-})->with([[null], [42], [false], [[]]]);
+})->with([[null], [42], [false], [[]], ['18446744073709551615']]);
 
 it('requires the correct record kind for object relationships', function (string $field): void {
     $record = match ($field) {
