@@ -39,7 +39,9 @@ final class DwgConverterServiceProvider extends ServiceProvider
                 $configuration,
             );
         });
-        $this->app->singleton(DwgManager::class);
+        $this->app->singleton(DwgManager::class, static fn (): DwgManager => new DwgManager(
+            static fn (): Converter => app(Converter::class),
+        ));
     }
 
     /**

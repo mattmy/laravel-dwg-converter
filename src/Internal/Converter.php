@@ -10,6 +10,7 @@ use Illuminate\Support\Collection;
 use JsonException;
 use Mattmy\DwgConverter\DwgBinary;
 use Mattmy\DwgConverter\DwgEntityQueryResult;
+use Mattmy\DwgConverter\DwgInfo;
 use Mattmy\DwgConverter\DwgLayer;
 use Mattmy\DwgConverter\DwgOutput;
 use Mattmy\DwgConverter\DxfVersion;
@@ -130,18 +131,9 @@ final class Converter
         $sourceStem = $this->sourceStem($source);
         $configuration = $this->jsonConfiguration($operation);
         $workspace = $this->workspace($source, $operation, $configuration);
-        $output = $workspace->outputPath('drawing.json');
 
         try {
-            $executable = $configuration['executable'];
-            $this->processRunner->assertAvailable($executable, $operation, 'dwgread', 'dwgread');
-            $this->processRunner->run(
-                [$executable, '-O', 'JSON', '-o', $output, $workspace->inputPath()],
-                $workspace,
-                $configuration['timeout'],
-                $operation,
-                'dwgread',
-            );
+            $output = $this->writeJson($workspace, $configuration, $operation);
             $this->assertJson($output, $workspace, $configuration['effective_output_limit']);
 
             return new DwgOutput(
@@ -320,18 +312,64 @@ final class Converter
     {
         $configuration = $this->processConfiguration('dwgread', 'entities');
         $workspace = Workspace::fromSource($source, $configuration['temporary_directory'], null, 'entities');
-        $output = $workspace->outputPath('drawing.json');
 
         try {
-            $executable = $configuration['executable'];
-            $this->processRunner->assertAvailable($executable, 'entities', 'dwgread', 'dwgread');
-            $this->processRunner->run([$executable, '-O', 'JSON', '-o', $output, $workspace->inputPath()], $workspace, $configuration['timeout'], 'entities', 'dwgread');
+            $output = $this->writeJson($workspace, $configuration, 'entities');
             $this->assertBoundedFile($output, $workspace, 'entities', null);
 
             return (new EntityParser())->parse($this->readJson($output, 'entities'), $layers);
         } finally {
             $workspace->cleanup('entities', 'conversion');
         }
+    }
+
+    /**
+     * Read basic drawing information using the bounded JSON operation.
+     *
+     * @throws DwgOperationFailed
+     * @throws InvalidDwg
+     * @throws LibreDwgUnavailable
+     */
+    public function info(UploadedFile|string|DwgBinary $source): DwgInfo
+    {
+        $operation = 'info';
+        $configuration = $this->jsonConfiguration($operation);
+        $workspace = $this->workspace($source, $operation, $configuration);
+
+        try {
+            $version = DwgHeader::read($workspace->inputPath(), $operation);
+            $output = $this->writeJson($workspace, $configuration, $operation);
+            $this->assertBoundedFile($output, $workspace, $operation, $configuration['effective_output_limit']);
+
+            return InfoParser::parse($this->readJson($output, $operation), $version);
+        } finally {
+            $workspace->cleanup($operation, 'conversion');
+        }
+    }
+
+    /**
+     * Probe dwgread and return the path of the native JSON artifact it writes.
+     *
+     * @param  array{executable: string, timeout: float}  $configuration
+     *
+     * @throws DwgOperationFailed
+     * @throws InvalidDwg
+     * @throws LibreDwgUnavailable
+     */
+    private function writeJson(Workspace $workspace, array $configuration, string $operation): string
+    {
+        $executable = $configuration['executable'];
+        $output = $workspace->outputPath('drawing.json');
+        $this->processRunner->assertAvailable($executable, $operation, 'dwgread', 'dwgread');
+        $this->processRunner->run(
+            [$executable, '-O', 'JSON', '-o', $output, $workspace->inputPath()],
+            $workspace,
+            $configuration['timeout'],
+            $operation,
+            'dwgread',
+        );
+
+        return $output;
     }
 
     /**
@@ -808,6 +846,8 @@ final class Converter
         string $operation,
         ?int $maxOutputBytes,
     ): void {
+        \clearstatcache(true, $path);
+
         if (\is_link($path) || ! \is_file($path) || ! $workspace->owns($path)) {
             throw new DwgOperationFailed('output_missing', ['operation' => $operation]);
         }

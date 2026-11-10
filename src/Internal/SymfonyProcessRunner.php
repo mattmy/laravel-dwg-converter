@@ -21,6 +21,8 @@ final class SymfonyProcessRunner implements ProcessRunner
 
     private const STDERR_LIMIT = 4096;
 
+    private const OMITTED_DIAGNOSTIC = '[diagnostic omitted]';
+
     /** @var array<string, list<string>> */
     private const REQUIRED_CAPABILITIES = [
         'dwgbmp' => ['dwgfile'],
@@ -156,11 +158,13 @@ final class SymfonyProcessRunner implements ProcessRunner
         $stderr = '';
         $stdout = '';
         $outputExceeded = false;
+        $context = $this->context($operation, $stage);
+        $failureContext = $operation === 'info' ? [...$context, 'stderr' => self::OMITTED_DIAGNOSTIC] : $context;
         $process = new Process($command, $workspace->directory());
         $process->setTimeout($timeout);
 
         try {
-            $process->run(function (string $type, string $buffer) use ($process, $capture, $maxOutputBytes, $operation, $stage, &$stderr, &$stdout, &$outputExceeded): void {
+            $process->run(function (string $type, string $buffer) use ($process, $capture, $maxOutputBytes, $context, &$stderr, &$stdout, &$outputExceeded): void {
                 if ($type === Process::ERR) {
                     $stderr = \substr($stderr . $buffer, 0, self::STDERR_LIMIT);
                     $process->clearErrorOutput();
@@ -171,20 +175,20 @@ final class SymfonyProcessRunner implements ProcessRunner
                             // Stopping the process may invoke this callback again; discard further stdout.
                             $outputExceeded = true;
 
-                            throw new DwgOperationFailed('output_too_large', $this->context($operation, $stage));
+                            throw new DwgOperationFailed('output_too_large', $context);
                         }
                         $stdout .= $buffer;
                     }
                 }
             });
         } catch (ProcessTimedOutException $exception) {
-            throw new DwgOperationFailed('process_timed_out', $this->context($operation, $stage), $exception);
+            throw new DwgOperationFailed('process_timed_out', $failureContext, $exception);
         } catch (Throwable $exception) {
             if ($exception instanceof DwgOperationFailed) {
                 throw $exception;
             }
 
-            throw new DwgOperationFailed('process_failed', $this->context($operation, $stage), $exception);
+            throw new DwgOperationFailed('process_failed', $failureContext, $exception);
         } finally {
             if ($process->isRunning()) {
                 $process->stop(0);
@@ -193,10 +197,10 @@ final class SymfonyProcessRunner implements ProcessRunner
 
         if (! $process->isSuccessful()) {
             $context = [
-                ...$this->context($operation, $stage),
+                ...$context,
                 'exit_code' => $process->getExitCode(),
-                // Omit layer diagnostics because they may contain names that cannot be reliably redacted.
-                'stderr' => \in_array($operation, ['layers', 'entities'], true) ? '[diagnostic omitted]' : $this->summary($stderr),
+                // Query diagnostics may contain names or metadata that cannot be reliably redacted.
+                'stderr' => \in_array($operation, ['layers', 'entities', 'info'], true) ? self::OMITTED_DIAGNOSTIC : $this->summary($stderr),
             ];
             if (($operation !== 'image' || $stage === 'dwg2dxf') && $this->isRejectedInput($stderr)) {
                 throw new InvalidDwg('libredwg_rejected_input', $context);

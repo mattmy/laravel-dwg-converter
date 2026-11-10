@@ -14,7 +14,6 @@ use Mattmy\DwgConverter\DwgColor;
 use Mattmy\DwgConverter\DwgColorMode;
 use Mattmy\DwgConverter\DwgCoordinateSystem;
 use Mattmy\DwgConverter\DwgDirection;
-use Mattmy\DwgConverter\DwgDrawingUnits;
 use Mattmy\DwgConverter\DwgDrawingUnitStatus;
 use Mattmy\DwgConverter\DwgEntity;
 use Mattmy\DwgConverter\DwgEntityCollection;
@@ -106,14 +105,8 @@ final class EntityParser
         foreach ($counts as $reason => $count) {
             $diagnostics[] = new DwgQueryDiagnostic(Diagnostic::from($reason), $count);
         }
-        $code = $this->header->INSUNITS ?? null;
-        $code = \is_int($code) ? $code : null;
-        $status = match (true) {
-            $code === 0 => DwgDrawingUnitStatus::UNSPECIFIED,
-            $code !== null && $code >= 1 && $code <= 24 => DwgDrawingUnitStatus::SPECIFIED,
-            default => DwgDrawingUnitStatus::UNKNOWN,
-        };
-        if ($status === DwgDrawingUnitStatus::UNKNOWN) {
+        $drawingUnits = InfoParser::drawingUnits($this->header);
+        if ($drawingUnits->status === DwgDrawingUnitStatus::UNKNOWN) {
             $diagnostics[] = new DwgQueryDiagnostic(Diagnostic::UNKNOWN_DRAWING_UNITS, null);
         }
         $this->index = [];
@@ -121,7 +114,7 @@ final class EntityParser
         $this->version = null;
         $this->issues = [];
 
-        return new DwgEntityQueryResult(new DwgEntityCollection($entities), $diagnostics, new DwgDrawingUnits($code, $status));
+        return new DwgEntityQueryResult(new DwgEntityCollection($entities), $diagnostics, $drawingUnits);
     }
 
     /**

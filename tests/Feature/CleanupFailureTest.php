@@ -17,6 +17,7 @@ use Mattmy\DwgConverter\Exceptions\DwgOperationFailed;
 use Mattmy\DwgConverter\Exceptions\InvalidDwg;
 use Mattmy\DwgConverter\Facades\Dwg;
 use Mattmy\DwgConverter\Internal\EntityParser;
+use Mattmy\DwgConverter\Internal\InfoParser;
 use Mattmy\DwgConverter\Internal\ProcessRunner;
 use Mattmy\DwgConverter\Internal\Workspace;
 use Mattmy\DwgConverter\Tests\Fakes\FailedCleanupStream;
@@ -236,7 +237,7 @@ it('returns reusable layers when cleanup or logging fails', function (bool $logg
 })->with([[false], [true]])->with([[false], [true]]);
 
 it('returns entity data when cleanup or logging fails', function (bool $loggerFails): void {
-    foreach ([EntityParser::class, DwgEntityQueryResult::class, DwgEntityCollection::class,
+    foreach ([EntityParser::class, InfoParser::class, DwgEntityQueryResult::class, DwgEntityCollection::class,
         DwgDrawingUnits::class, DwgDrawingUnitStatus::class, Collection::class] as $class) {
         \class_exists($class);
     }
@@ -296,6 +297,7 @@ it('maps artifact read failures and preserves their primary exception through cl
     // The fault-injection wrapper replaces file access, including Composer autoloading.
     \class_exists(DwgOperationFailed::class);
     \class_exists(EntityParser::class);
+    \class_exists(InfoParser::class);
     $previous = $warning ? new ErrorException('Private C:/drawings/customer.json read failure.') : null;
     FailedCleanupStream::$jsonReadFailure = $warning ? 'warning' : 'false';
     FailedCleanupStream::$failureMethod = $cleanupFails ? 'scandir' : 'none';
@@ -332,6 +334,8 @@ it('maps artifact read failures and preserves their primary exception through cl
             $output->output();
         } elseif ($operation === 'entities') {
             Dwg::entities($source)->read();
+        } elseif ($operation === 'info') {
+            Dwg::info($source)->read();
         } else {
             Dwg::toJson($source)->convert();
         }
@@ -361,4 +365,4 @@ it('maps artifact read failures and preserves their primary exception through cl
     if ($output !== null) {
         expect(fn () => $output->output())->toThrow(LogicException::class);
     }
-})->with(['entities', 'json', 'output'])->with([[false], [true]])->with([[false], [true]]);
+})->with(['entities', 'info', 'json', 'output'])->with([[false], [true]])->with([[false], [true]]);

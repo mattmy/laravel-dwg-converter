@@ -24,6 +24,10 @@ final class FailedCleanupStream
 
     public static string $jsonReadFailure = '';
 
+    public static string $headerReadFailure = '';
+
+    public static int $headerBytesRequested = 0;
+
     public static ?string $sourcePath = null;
 
     public static int $closedInputs = 0;
@@ -84,6 +88,11 @@ final class FailedCleanupStream
     /** Provide readable bytes for successful delivery before cleanup fails. */
     public function stream_open(string $path, string $mode, int $options, ?string &$openedPath): bool
     {
+        if (self::$headerReadFailure === 'open') {
+            \trigger_error('Synthetic header open failure.', \E_USER_WARNING);
+
+            return false;
+        }
         if (\str_ends_with($path, '.json') && self::$jsonReadFailure !== '') {
             if (self::$jsonReadFailure === 'warning') {
                 \trigger_error('Private C:/drawings/customer.json read failure.', \E_USER_WARNING);
@@ -136,6 +145,10 @@ final class FailedCleanupStream
     /** Read the synthetic artifact without touching a real source file. */
     public function stream_read(int $count): string
     {
+        self::$headerBytesRequested += $count;
+        if (self::$headerReadFailure === 'read') {
+            \trigger_error('Synthetic header read failure.', \E_USER_WARNING);
+        }
         $contents = \substr(self::$readContents, $this->position, $count);
         $this->position += \strlen($contents);
 

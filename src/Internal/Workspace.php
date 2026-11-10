@@ -172,6 +172,18 @@ final class Workspace
     }
 
     /**
+     * Validate an upload or local file without taking ownership of it.
+     *
+     * @throws InvalidDwg
+     */
+    public static function sourcePath(UploadedFile|string $source, string $operation): string
+    {
+        return $source instanceof UploadedFile
+            ? self::uploadedPath($source, $operation)
+            : self::localPath($source, $operation);
+    }
+
+    /**
      * Remove a package-owned directory without following symbolic links.
      *
      * @throws RuntimeException
@@ -212,14 +224,11 @@ final class Workspace
         if ($source instanceof DwgBinary) {
             $this->writeBinary($source->contents(), $maxInputBytes, $operation);
         } else {
-            $path = $source instanceof UploadedFile
-                ? $this->uploadedPath($source, $operation)
-                : $this->localPath($source, $operation);
-            $this->copyPath($path, $maxInputBytes, $operation);
+            $this->copyPath(self::sourcePath($source, $operation), $maxInputBytes, $operation);
         }
 
-        $header = \file_get_contents($this->inputPath(), false, null, 0, 6);
-        if (! \is_string($header) || \preg_match('/^AC10[0-9]{2}$/', $header) !== 1) {
+        $header = \file_get_contents($this->inputPath(), false, null, 0, DwgHeader::LENGTH);
+        if (! \is_string($header) || ! DwgHeader::isCandidate($header)) {
             throw new InvalidDwg('invalid_dwg_header', ['operation' => $operation]);
         }
     }
@@ -229,7 +238,7 @@ final class Workspace
      *
      * @throws InvalidDwg
      */
-    private function uploadedPath(UploadedFile $source, string $operation): string
+    private static function uploadedPath(UploadedFile $source, string $operation): string
     {
         if (! $source->isValid()) {
             throw new InvalidDwg('invalid_upload', ['operation' => $operation]);
@@ -240,7 +249,7 @@ final class Workspace
             throw new InvalidDwg('invalid_upload', ['operation' => $operation]);
         }
 
-        return $this->localPath($path, $operation);
+        return self::localPath($path, $operation);
     }
 
     /**
@@ -248,7 +257,7 @@ final class Workspace
      *
      * @throws InvalidDwg
      */
-    private function localPath(string $path, string $operation): string
+    private static function localPath(string $path, string $operation): string
     {
         if (! self::isAbsolutePath($path)) {
             throw new InvalidDwg('input_not_absolute', ['operation' => $operation]);
