@@ -11,6 +11,7 @@ Laravel DWG Converter 將 LibreDWG 命令列工具整合至 Laravel 應用，
 - 擷取 DWG 內嵌縮圖。
 - 查詢圖層名稱與凍結、關閉、鎖定狀態。
 - 讀取、篩選與統計圖元資料
+- 辨識 DWG 儲存格式並讀取基本圖面資訊。
 - 將 DWG 轉換為 ASCII DXF。
 - 將 DWG 輸出為結構 JSON。
 - 建立 PNG、JPEG 或 WebP 預覽。
@@ -39,6 +40,8 @@ ImageMagick。
 | `Dwg::toJson(...)->convert()` | 具 JSON output 能力的 LibreDWG `dwgread` |
 | `Dwg::layers(...)->read()` | LibreDWG `dwglayers --flags` |
 | `Dwg::entities(...)->read()` | 支援 JSON 輸出的 LibreDWG `dwgread` |
+| `Dwg::version(...)` | 無 |
+| `Dwg::info(...)->read()` | 支援 JSON 輸出的 LibreDWG `dwgread` |
 | `Dwg::toImage(...)->convert()` | LibreDWG `dwg2dxf`、LibreOffice 7.4+ `soffice`、ImageMagick 7 `magick` |
 
 請使用仍受維護且包含最新安全修補的 LibreDWG 版本。本套件不會下載或附帶這些工具。LibreDWG 安裝方式請參考
@@ -114,7 +117,7 @@ bytes。普通 string 一律視為 path。
 失敗時會拋出 `LibreDwgUnavailable`、`InvalidDwg` 或 `DwgOperationFailed`。每個例外都提供穩定的
 `reason()` 與去敏後的 scalar `context()`。
 
-檔案操作與圖層查詢依各自適用的上限執行，預設為 200 MiB 輸入、512 MiB 一般輸出及 64 MiB JSON 輸出。將 byte limit 設為 `null`、零或
+檔案操作、圖層查詢與圖面資訊讀取依各自適用的上限執行，預設為 200 MiB 輸入、512 MiB 一般輸出及 64 MiB JSON 輸出。將 byte limit 設為 `null`、零或
 負整數即可停用。處理不可信 DWG 時，應保留正整數上限，並在有限制資源的 worker 或 container
 執行轉換。
 

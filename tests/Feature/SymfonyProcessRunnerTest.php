@@ -213,6 +213,30 @@ it('maps process timeout without leaving a workspace', function (): void {
     }
 });
 
+it('omits private drawing diagnostics from the info timeout context', function (): void {
+    $workspace = Workspace::fromSource(DwgBinary::from('AC1032 drawing'), config()->string('dwg-converter.temporary_directory'), null, 'info');
+
+    try {
+        (new SymfonyProcessRunner())->run(
+            [\PHP_BINARY, '-r', 'fwrite(STDERR, "private drawing metadata"); usleep(2000000);'],
+            $workspace,
+            0.1,
+            'info',
+            'dwgread',
+        );
+    } catch (DwgOperationFailed $failure) {
+        expect($failure->reason())->toBe('process_timed_out')
+            ->and($failure->context())->toBe(['operation' => 'info', 'stage' => 'dwgread', 'stderr' => '[diagnostic omitted]'])
+            ->and($failure->getPrevious())->toBeInstanceOf(ProcessTimedOutException::class);
+
+        return;
+    } finally {
+        $workspace->cleanup('info');
+    }
+
+    throw new RuntimeException('Expected info process timeout.');
+});
+
 it('redacts paths from a generic process failure', function (): void {
     $workspace = Workspace::fromSource(
         DwgBinary::from('AC1032 drawing'),
@@ -327,22 +351,22 @@ it('maps capture timeout while preserving its original exception', function (): 
     throw new RuntimeException('Expected capture timeout.');
 });
 
-it('omits private entity diagnostics on process failure', function (bool $invalid): void {
-    $workspace = Workspace::fromSource(DwgBinary::from('AC1032 fixture'), config()->string('dwg-converter.temporary_directory'), null, 'entities');
+it('omits private query diagnostics on process failure', function (string $operation, bool $invalid): void {
+    $workspace = Workspace::fromSource(DwgBinary::from('AC1032 fixture'), config()->string('dwg-converter.temporary_directory'), null, $operation);
 
     try {
-        (new SymfonyProcessRunner())->run([\PHP_BINARY, '-r', $invalid ? 'fwrite(STDERR, "ERROR 0x800\n"); exit(7);' : 'fwrite(STDERR, "private block and attribute names"); exit(7);'], $workspace, 5.0, 'entities', 'dwgread');
+        (new SymfonyProcessRunner())->run([\PHP_BINARY, '-r', $invalid ? 'fwrite(STDERR, "ERROR 0x800\n"); exit(7);' : 'fwrite(STDERR, "private drawing metadata"); exit(7);'], $workspace, 5.0, $operation, 'dwgread');
     } catch (DwgOperationFailed|InvalidDwg $failure) {
-        expect($failure->context())->toBe(['operation' => 'entities', 'stage' => 'dwgread', 'exit_code' => 7, 'stderr' => '[diagnostic omitted]'])
+        expect($failure->context())->toBe(['operation' => $operation, 'stage' => 'dwgread', 'exit_code' => 7, 'stderr' => '[diagnostic omitted]'])
             ->and($failure->reason())->toBe($invalid ? 'libredwg_rejected_input' : 'process_failed');
 
         return;
     } finally {
-        $workspace->cleanup('entities');
+        $workspace->cleanup($operation);
     }
 
     throw new RuntimeException('Expected process failure.');
-})->with([[false], [true]]);
+})->with(['entities', 'info'])->with([[false], [true]]);
 
 it('requires ON capability only for an ON query', function (string $options, bool $supported): void {
     $executable = capabilityProbeExecutable('dwglayers 0.14', 'Usage: dwglayers ' . $options);

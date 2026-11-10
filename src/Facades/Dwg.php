@@ -14,6 +14,8 @@ use Mattmy\DwgConverter\DwgManager;
  * @method static \Mattmy\DwgConverter\Operations\LayerReading layers(\Illuminate\Http\UploadedFile|string|\Mattmy\DwgConverter\DwgBinary $source)
  * @method static \Mattmy\DwgConverter\Operations\EntityReading entities(\Illuminate\Http\UploadedFile|string|\Mattmy\DwgConverter\DwgBinary $source)
  * @method static \Mattmy\DwgConverter\Operations\ThumbnailExtraction thumbnail(\Illuminate\Http\UploadedFile|string|\Mattmy\DwgConverter\DwgBinary $source)
+ * @method static \Mattmy\DwgConverter\DwgFileVersion version(\Illuminate\Http\UploadedFile|string|\Mattmy\DwgConverter\DwgBinary $source)
+ * @method static \Mattmy\DwgConverter\Operations\InfoReading info(\Illuminate\Http\UploadedFile|string|\Mattmy\DwgConverter\DwgBinary $source)
  *
  * @see DwgManager
  */

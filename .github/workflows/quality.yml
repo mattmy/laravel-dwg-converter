@@ -127,4 +127,12 @@ jobs:
           grep -qx 'src/DwgEntityType.php' archive-contents.txt
           grep -qx 'src/Internal/EntityParser.php' archive-contents.txt
           grep -qx 'src/Operations/EntityReading.php' archive-contents.txt
+          grep -qx 'src/DwgFileVersion.php' archive-contents.txt
+          grep -qx 'src/DwgInfo.php' archive-contents.txt
+          grep -qx 'src/DwgSummaryInfo.php' archive-contents.txt
+          grep -qx 'src/DwgCustomProperty.php' archive-contents.txt
+          grep -qx 'src/DwgInfoTimestamps.php' archive-contents.txt
+          grep -qx 'src/Internal/DwgHeader.php' archive-contents.txt
+          grep -qx 'src/Internal/InfoParser.php' archive-contents.txt
+          grep -qx 'src/Operations/InfoReading.php' archive-contents.txt
           ! grep -Eq '(^|/)(\.github|vendor|tests|composer\.lock)(/|$)|\.(exe|dwg)$' archive-contents.txt

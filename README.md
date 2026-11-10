@@ -11,6 +11,7 @@ JPEG, or WebP previews also requires LibreOffice and ImageMagick.
 - Extract embedded DWG thumbnails.
 - Read layer names and frozen, off, and locked states.
 - Read, filter, and count entity data
+- Identify the stored DWG format and read basic drawing information.
 - Convert DWG files to ASCII DXF.
 - Export DWG files as structural JSON.
 - Create PNG, JPEG, or WebP previews.
@@ -39,6 +40,8 @@ thumbnails, create DXF, or export JSON.
 | `Dwg::toJson(...)->convert()` | LibreDWG `dwgread` with JSON output support |
 | `Dwg::layers(...)->read()` | LibreDWG `dwglayers --flags` |
 | `Dwg::entities(...)->read()` | LibreDWG `dwgread` with JSON output support |
+| `Dwg::version(...)` | None |
+| `Dwg::info(...)->read()` | LibreDWG `dwgread` with JSON output support |
 | `Dwg::toImage(...)->convert()` | LibreDWG `dwg2dxf`, LibreOffice 7.4+ `soffice`, ImageMagick 7 `magick` |
 
 Use a maintained LibreDWG build with the latest security fixes. The package does not download or
@@ -118,7 +121,7 @@ Logger failures also leave the operation's result or original exception unchange
 Failures use `LibreDwgUnavailable`, `InvalidDwg`, or `DwgOperationFailed`. Each exception provides a stable
 `reason()` and sanitized scalar `context()`.
 
-The applicable defaults for file operations and layer queries are 200 MiB input, 512 MiB general
+The applicable defaults for file operations, layer queries, and drawing information are 200 MiB input, 512 MiB general
 output, and 64 MiB JSON output. Set a byte limit to
 `null`, zero, or a negative integer to disable it. Keep positive limits and run untrusted DWG conversions in
 a resource-limited worker or container.
