@@ -5,9 +5,11 @@ declare(strict_types=1);
 namespace Mattmy\DwgConverter\Operations;
 
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Collection;
 use InvalidArgumentException;
 use Mattmy\DwgConverter\DwgBinary;
 use Mattmy\DwgConverter\DwgEntityQueryResult;
+use Mattmy\DwgConverter\DwgLayer;
 use Mattmy\DwgConverter\Exceptions\DwgOperationFailed;
 use Mattmy\DwgConverter\Exceptions\InvalidDwg;
 use Mattmy\DwgConverter\Exceptions\LibreDwgUnavailable;
@@ -30,25 +32,26 @@ final readonly class EntityReading
     /**
      * Replace the selected layer names without performing I/O.
      *
-     * @param  string|array<array-key, mixed>  $layers  Only lists of strings are accepted.
+     * @param  string|DwgLayer|array<array-key, mixed>|Collection<array-key, mixed>  $layers  Arrays must be lists of names or layers.
      *
      * @throws InvalidArgumentException
      */
-    public function onlyLayers(string|array $layers, string ...$additionalLayers): self
+    public function onlyLayers(string|DwgLayer|array|Collection $layers, string|DwgLayer ...$additionalLayers): self
     {
-        $names = \is_string($layers) ? [$layers] : $layers;
+        $names = $layers instanceof Collection ? $layers->values()->all() : (\is_array($layers) ? $layers : [$layers]);
         if (! \array_is_list($names)) {
-            throw new InvalidArgumentException('Layer names must be a list of strings.');
+            throw new InvalidArgumentException('Layers must be a list of names or DwgLayer objects.');
         }
         $validated = [];
-        foreach ($names as $name) {
+        foreach ([...$names, ...\array_values($additionalLayers)] as $name) {
+            $name = $name instanceof DwgLayer ? $name->name : $name;
             if (! \is_string($name)) {
-                throw new InvalidArgumentException('Layer names must be strings.');
+                throw new InvalidArgumentException('Layers must be names or DwgLayer objects.');
             }
             $validated[] = $name;
         }
 
-        return new self($this->converter, $this->source, [...$validated, ...\array_values($additionalLayers)]);
+        return new self($this->converter, $this->source, $validated);
     }
 
     /**

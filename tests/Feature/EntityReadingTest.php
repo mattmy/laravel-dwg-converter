@@ -11,6 +11,7 @@ use Mattmy\DwgConverter\DwgEntityIssueReason;
 use Mattmy\DwgConverter\DwgEntityQueryResult;
 use Mattmy\DwgConverter\DwgEntityType;
 use Mattmy\DwgConverter\DwgInsertGeometry;
+use Mattmy\DwgConverter\DwgLayer;
 use Mattmy\DwgConverter\DwgLineGeometry;
 use Mattmy\DwgConverter\DwgManager;
 use Mattmy\DwgConverter\DwgOwnerKind;
@@ -21,6 +22,7 @@ use Mattmy\DwgConverter\Exceptions\LibreDwgUnavailable;
 use Mattmy\DwgConverter\Facades\Dwg;
 use Mattmy\DwgConverter\Internal\Converter;
 use Mattmy\DwgConverter\Internal\ProcessRunner;
+use Mattmy\DwgConverter\Internal\Workspace;
 use Mattmy\DwgConverter\Tests\Fakes\FakeProcessRunner;
 use Symfony\Component\Process\Process;
 
@@ -858,3 +860,44 @@ it('still validates sources and process failures with an empty layer selection',
     Dwg::clearResolvedInstances();
     expect(fn () => Dwg::entities(DwgBinary::from('AC1032 fixture'))->onlyLayers([])->read())->toThrow(DwgOperationFailed::class, 'process_timed_out');
 });
+
+it('accepts layer query objects and collections as immutable name selections', function (string $form): void {
+    $runner = new FakeProcessRunner(static function (array $command, Workspace $workspace): string {
+        if (\in_array('--flags', $command, true)) {
+            return " + \t 圖層 \n";
+        }
+        \file_put_contents($workspace->outputPath('drawing.json'), nativeEntityDump([
+            nativeEntity(),
+            ['object' => 'LAYER', 'handle' => [0, 1, 6], 'name' => 'Other'],
+            nativeEntity(['handle' => [0, 1, 4], 'layer' => [5, 1, 6, 6]]),
+        ]));
+
+        return '';
+    });
+    app()->instance(ProcessRunner::class, $runner);
+    $source = DwgBinary::from('AC1032 fixture');
+    $layers = Dwg::layers($source)->onlyOn()->read();
+    $layer = $layers->sole();
+    $input = match ($form) {
+        'object' => $layer,
+        'collection' => $layers,
+        'keyed' => $layers->keyBy('name'),
+        'mixed' => [$layer, 'Other', $layer],
+        'empty' => collect(),
+        default => [$layer],
+    };
+    $reading = Dwg::entities($source);
+    $selected = $form === 'variadic' ? $reading->onlyLayers($input, new DwgLayer('Other', true, true, false)) : $reading->onlyLayers($input);
+    expect($runner->commands)->toHaveCount(1);
+    $layers->push(new DwgLayer('Other', false, false, false));
+    $expected = \in_array($form, ['mixed', 'variadic'], true) ? ['3', '4'] : ($form === 'empty' ? [] : ['3']);
+    expect($selected->read()->entities->pluck('handle')->all())->toBe($expected)
+        ->and($selected->onlyLayers('Other')->read()->entities->pluck('handle')->all())->toBe(['4'])
+        ->and($selected->read()->entities->pluck('handle')->all())->toBe($expected)
+        ->and($reading->read()->entities)->toHaveCount(2);
+})->with([['object'], ['collection'], ['keyed'], ['mixed'], ['empty'], ['variadic']]);
+
+it('rejects invalid collection items before I/O', function (mixed $item): void {
+    expect(fn () => Dwg::entities(DwgBinary::from('invalid'))->onlyLayers(collect([$item])))
+        ->toThrow(InvalidArgumentException::class);
+})->with([[null], [1], [new stdClass()], [['nested']]]);

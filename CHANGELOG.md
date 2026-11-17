@@ -6,6 +6,12 @@ All notable changes to this project will be documented in this file. Laravel DWG
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-11-17
+
+### Added
+
+- Accept `DwgLayer` objects and Laravel collections in `onlyLayers()`, selecting by their names.
+
 ## [0.6.0] - 2026-11-10
 
 ### Added
@@ -117,7 +123,8 @@ All notable changes to this project will be documented in this file. Laravel DWG
 - Add `Dwg::toJson($source)->convert()` for validated LibreDWG structural JSON output.
 - Allow missing, null, zero, and negative byte-limit settings to disable their respective limits.
 
-[Unreleased]: https://github.com/mattmy/laravel-dwg-converter/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/mattmy/laravel-dwg-converter/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/mattmy/laravel-dwg-converter/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/mattmy/laravel-dwg-converter/compare/v0.5.1...v0.6.0
 [0.5.1]: https://github.com/mattmy/laravel-dwg-converter/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/mattmy/laravel-dwg-converter/compare/v0.4.0...v0.5.0
