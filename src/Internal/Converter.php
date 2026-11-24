@@ -915,15 +915,11 @@ final class Converter
     private function assertJson(string $path, Workspace $workspace, ?int $maxOutputBytes): void
     {
         $this->assertBoundedFile($path, $workspace, 'json', $maxOutputBytes);
-        $contents = $this->readJson($path, 'json');
 
         try {
-            $decoded = \json_decode($contents, flags: \JSON_THROW_ON_ERROR);
-            unset($decoded);
+            \json_decode($this->readJson($path, 'json'), flags: \JSON_THROW_ON_ERROR);
         } catch (JsonException $exception) {
             throw new DwgOperationFailed('json_invalid', ['operation' => 'json'], $exception);
-        } finally {
-            unset($contents);
         }
     }
 
