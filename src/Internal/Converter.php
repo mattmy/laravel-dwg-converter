@@ -93,16 +93,8 @@ final class Converter
         try {
             $executable = $configuration['executable'];
             $this->processRunner->assertAvailable($executable, $operation);
-            $command = [$executable];
-            if ($version instanceof DxfVersion) {
-                $command[] = '--as';
-                $command[] = $version->value;
-            }
-            $command[] = '-o';
-            $command[] = $output;
-            $command[] = $workspace->inputPath();
             $this->processRunner->run(
-                $command,
+                $this->dxfCommand($executable, $workspace, $output, $version),
                 $workspace,
                 $configuration['timeout'],
                 $operation,
@@ -182,16 +174,8 @@ final class Converter
             }
 
             $this->processRunner->assertAvailable($dxfConfiguration['executable'], $operation, 'dwg2dxf', 'dwg2dxf');
-            $dxfCommand = [$dxfConfiguration['executable']];
-            if ($version instanceof DxfVersion) {
-                $dxfCommand[] = '--as';
-                $dxfCommand[] = $version->value;
-            }
-            $dxfCommand[] = '-o';
-            $dxfCommand[] = $dxf;
-            $dxfCommand[] = $workspace->inputPath();
             $this->processRunner->run(
-                $dxfCommand,
+                $this->dxfCommand($dxfConfiguration['executable'], $workspace, $dxf, $version),
                 $workspace,
                 $dxfConfiguration['timeout'],
                 $operation,
@@ -345,6 +329,22 @@ final class Converter
         } finally {
             $workspace->cleanup($operation, 'conversion');
         }
+    }
+
+    /**
+     * Build the full ASCII DXF command for direct output or an image intermediate.
+     *
+     * @return list<string>
+     */
+    private function dxfCommand(string $executable, Workspace $workspace, string $output, ?DxfVersion $version): array
+    {
+        return [
+            $executable,
+            ...($version === null ? [] : ['--as', $version->value]),
+            '-o',
+            $output,
+            $workspace->inputPath(),
+        ];
     }
 
     /**
