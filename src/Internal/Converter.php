@@ -93,16 +93,8 @@ final class Converter
         try {
             $executable = $configuration['executable'];
             $this->processRunner->assertAvailable($executable, $operation);
-            $command = [$executable];
-            if ($version instanceof DxfVersion) {
-                $command[] = '--as';
-                $command[] = $version->value;
-            }
-            $command[] = '-o';
-            $command[] = $output;
-            $command[] = $workspace->inputPath();
             $this->processRunner->run(
-                $command,
+                $this->dxfCommand($executable, $workspace, $output, $version),
                 $workspace,
                 $configuration['timeout'],
                 $operation,
@@ -182,16 +174,8 @@ final class Converter
             }
 
             $this->processRunner->assertAvailable($dxfConfiguration['executable'], $operation, 'dwg2dxf', 'dwg2dxf');
-            $dxfCommand = [$dxfConfiguration['executable']];
-            if ($version instanceof DxfVersion) {
-                $dxfCommand[] = '--as';
-                $dxfCommand[] = $version->value;
-            }
-            $dxfCommand[] = '-o';
-            $dxfCommand[] = $dxf;
-            $dxfCommand[] = $workspace->inputPath();
             $this->processRunner->run(
-                $dxfCommand,
+                $this->dxfCommand($dxfConfiguration['executable'], $workspace, $dxf, $version),
                 $workspace,
                 $dxfConfiguration['timeout'],
                 $operation,
@@ -345,6 +329,22 @@ final class Converter
         } finally {
             $workspace->cleanup($operation, 'conversion');
         }
+    }
+
+    /**
+     * Build the full ASCII DXF command for direct output or an image intermediate.
+     *
+     * @return list<string>
+     */
+    private function dxfCommand(string $executable, Workspace $workspace, string $output, ?DxfVersion $version): array
+    {
+        return [
+            $executable,
+            ...($version === null ? [] : ['--as', $version->value]),
+            '-o',
+            $output,
+            $workspace->inputPath(),
+        ];
     }
 
     /**
@@ -915,15 +915,11 @@ final class Converter
     private function assertJson(string $path, Workspace $workspace, ?int $maxOutputBytes): void
     {
         $this->assertBoundedFile($path, $workspace, 'json', $maxOutputBytes);
-        $contents = $this->readJson($path, 'json');
 
         try {
-            $decoded = \json_decode($contents, flags: \JSON_THROW_ON_ERROR);
-            unset($decoded);
+            \json_decode($this->readJson($path, 'json'), flags: \JSON_THROW_ON_ERROR);
         } catch (JsonException $exception) {
             throw new DwgOperationFailed('json_invalid', ['operation' => 'json'], $exception);
-        } finally {
-            unset($contents);
         }
     }
 
@@ -946,7 +942,7 @@ final class Converter
             ImageFormat::JPEG => $this->isJpeg($path, $size),
             ImageFormat::WEBP => $this->isWebp($path, $size),
         };
-        $image = $this->imageInfo($path);
+        $image = $structureIsValid ? $this->imageInfo($path) : null;
         $expectedType = match ($format) {
             ImageFormat::PNG => \IMAGETYPE_PNG,
             ImageFormat::JPEG => \IMAGETYPE_JPEG,
@@ -955,8 +951,7 @@ final class Converter
         $width = $image['width'] ?? 0;
         $height = $image['height'] ?? 0;
         if (
-            ! $structureIsValid
-            || ($image['type'] ?? 0) !== $expectedType
+            ($image['type'] ?? 0) !== $expectedType
             || $width < 1
             || $height < 1
         ) {
@@ -992,7 +987,7 @@ final class Converter
     }
 
     /**
-     * Confirm a complete RIFF WebP container header.
+     * Check RIFF boundaries and require a non-empty static WebP image chunk.
      */
     private function isWebp(string $path, int $size): bool
     {
@@ -1004,11 +999,35 @@ final class Converter
         $riff = \is_string($header) ? \unpack('Vsize', \substr($header, 4, 4)) : false;
         $riffSize = $riff['size'] ?? null;
 
-        return \is_string($header)
-            && \substr($header, 0, 4) === 'RIFF'
-            && \substr($header, 8, 4) === 'WEBP'
-            && \is_int($riffSize)
-            && $riffSize + 8 === $size;
+        if (! \is_string($header) || \substr($header, 0, 4) !== 'RIFF'
+            || \substr($header, 8, 4) !== 'WEBP' || $riffSize !== $size - 8) {
+            return false;
+        }
+
+        $offset = 12;
+        $hasImageData = false;
+        while ($offset <= $size - 8) {
+            $chunk = \file_get_contents($path, false, null, $offset, 8);
+            if (! \is_string($chunk) || \strlen($chunk) !== 8) {
+                return false;
+            }
+            $length = \unpack('Vlength', $chunk, 4)['length'] ?? null;
+            if (! \is_int($length) || $length < 0 || $length > $size - $offset - 8) {
+                return false;
+            }
+            if ($length > 0 && \in_array(\substr($chunk, 0, 4), ['VP8 ', 'VP8L'], true)) {
+                $hasImageData = true;
+            }
+            $offset += 8 + $length;
+            if ($length % 2 !== 0) {
+                if ($offset === $size || \file_get_contents($path, false, null, $offset, 1) !== "\0") {
+                    return false;
+                }
+                $offset++;
+            }
+        }
+
+        return $hasImageData && $offset === $size;
     }
 
     /**

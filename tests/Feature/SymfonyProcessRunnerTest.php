@@ -59,7 +59,7 @@ it('accepts a tool only when its required CLI shape is present', function (
 })->with([
     'dwgbmp' => ['thumbnail', 'dwgbmp', 'dwgbmp 0.14', 'Usage: dwgbmp DWGFILE'],
     'dwg2dxf' => ['dxf', 'dwg2dxf', 'dwg2dxf 0.14', 'Usage: dwg2dxf --as version -o outfile DWGFILE'],
-    'dwgread' => ['json', 'dwgread', 'dwgread 0.14', 'Usage: dwgread --format fmt JSON -o outfile DWGFILE'],
+    'dwgread' => ['json', 'dwgread', 'dwgread 0.14', 'Usage: dwgread -O fmt, --format fmt JSON -o outfile DWGFILE'],
     'dwglayers' => ['layers', 'dwglayers', 'dwglayers 0.14', 'Usage: dwglayers --flags DWGFILE'],
     'LibreOffice' => ['image', 'libreoffice', 'LibreOffice 7.4.0', 'Usage: soffice --headless --convert-to fmt --outdir dir'],
     'ImageMagick' => ['image', 'imagemagick', 'Version: ImageMagick 7.0.0', 'Usage: magick -fuzz value -trim -alpha value'],
@@ -213,29 +213,29 @@ it('maps process timeout without leaving a workspace', function (): void {
     }
 });
 
-it('omits private drawing diagnostics from the info timeout context', function (): void {
-    $workspace = Workspace::fromSource(DwgBinary::from('AC1032 drawing'), config()->string('dwg-converter.temporary_directory'), null, 'info');
+it('omits private drawing diagnostics from the metadata query timeout context', function (string $operation): void {
+    $workspace = Workspace::fromSource(DwgBinary::from('AC1032 drawing'), config()->string('dwg-converter.temporary_directory'), null, $operation);
 
     try {
         (new SymfonyProcessRunner())->run(
             [\PHP_BINARY, '-r', 'fwrite(STDERR, "private drawing metadata"); usleep(2000000);'],
             $workspace,
             0.1,
-            'info',
+            $operation,
             'dwgread',
         );
     } catch (DwgOperationFailed $failure) {
         expect($failure->reason())->toBe('process_timed_out')
-            ->and($failure->context())->toBe(['operation' => 'info', 'stage' => 'dwgread', 'stderr' => '[diagnostic omitted]'])
+            ->and($failure->context())->toBe(['operation' => $operation, 'stage' => 'dwgread', 'stderr' => '[diagnostic omitted]'])
             ->and($failure->getPrevious())->toBeInstanceOf(ProcessTimedOutException::class);
 
         return;
     } finally {
-        $workspace->cleanup('info');
+        $workspace->cleanup($operation);
     }
 
-    throw new RuntimeException('Expected info process timeout.');
-});
+    throw new RuntimeException('Expected metadata query process timeout.');
+})->with(['info', 'entities']);
 
 it('redacts paths from a generic process failure', function (): void {
     $workspace = Workspace::fromSource(
@@ -341,6 +341,7 @@ it('maps capture timeout while preserving its original exception', function (): 
         (new SymfonyProcessRunner())->capture([\PHP_BINARY, '-r', 'usleep(500000);'], $workspace, 0.05, 'layers', 'dwglayers', 1024);
     } catch (DwgOperationFailed $failure) {
         expect($failure->reason())->toBe('process_timed_out')
+            ->and($failure->context())->toBe(['operation' => 'layers', 'stage' => 'dwglayers', 'stderr' => '[diagnostic omitted]'])
             ->and($failure->getPrevious())->toBeInstanceOf(ProcessTimedOutException::class);
 
         return;
@@ -402,4 +403,6 @@ it('rejects help that only advertises a lookalike for a required option', functi
 })->with([
     'longer flag name' => ['dwglayers', 'Usage: dwglayers --flags-extra DWGFILE'],
     'different short option' => ['dwgread', 'Usage: dwgread -O fmt, --format fmt JSON DWGFILE'],
+    'missing uppercase output format option' => ['dwgread', 'Usage: dwgread --format fmt JSON -o outfile DWGFILE'],
+    'different JSON formats' => ['dwgread', 'Usage: dwgread -O fmt, --format fmt minJSON GeoJSON -o outfile DWGFILE'],
 ]);

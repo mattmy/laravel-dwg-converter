@@ -374,10 +374,13 @@ final class EntityParser
             || ($reference && $value[0] <= 5 && $value[1] === 0)) {
             return null;
         }
-        if ((! \is_int($number) && ! \is_string($number)) || \preg_match('/^[1-9][0-9]*$/D', (string) $number) !== 1) {
+        if (\is_int($number)) {
+            return $number > 0 ? \strtoupper(\dechex($number)) : null;
+        }
+        if (! \is_string($number) || \preg_match('/^[1-9][0-9]*$/D', $number) !== 1) {
             return null;
         }
-        $decimal = (string) $number;
+        $decimal = $number;
         if (\strlen($decimal) > 20 || (\strlen($decimal) === 20 && \strcmp($decimal, '18446744073709551615') > 0)) {
             return null;
         }

@@ -6,6 +6,18 @@ All notable changes to this project will be documented in this file. Laravel DWG
 
 ## [Unreleased]
 
+## [0.7.1]
+
+### Fixed
+
+- Reject WebP previews with truncated RIFF chunks, invalid padding, or no non-empty image data chunk. This applies to both intermediate and final WebP files.
+- Require `dwgread` to advertise both `-O` and `-o` and list `JSON` as a distinct output format. `minJSON` and `GeoJSON` do not satisfy this check.
+- Include the redacted `stderr` marker when layer or entity queries time out or fail to start, preserving the original exception.
+
+### Changed
+
+- Speed up entity queries by formatting native integer handles directly while preserving exact unsigned 64-bit handle values.
+
 ## [0.7.0] - 2026-11-17
 
 ### Added
@@ -123,7 +135,8 @@ All notable changes to this project will be documented in this file. Laravel DWG
 - Add `Dwg::toJson($source)->convert()` for validated LibreDWG structural JSON output.
 - Allow missing, null, zero, and negative byte-limit settings to disable their respective limits.
 
-[Unreleased]: https://github.com/mattmy/laravel-dwg-converter/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/mattmy/laravel-dwg-converter/compare/v0.7.1...HEAD
+[0.7.1]: https://github.com/mattmy/laravel-dwg-converter/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/mattmy/laravel-dwg-converter/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/mattmy/laravel-dwg-converter/compare/v0.5.1...v0.6.0
 [0.5.1]: https://github.com/mattmy/laravel-dwg-converter/compare/v0.5.0...v0.5.1

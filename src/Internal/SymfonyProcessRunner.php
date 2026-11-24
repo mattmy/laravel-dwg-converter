@@ -27,7 +27,7 @@ final class SymfonyProcessRunner implements ProcessRunner
     private const REQUIRED_CAPABILITIES = [
         'dwgbmp' => ['dwgfile'],
         'dwg2dxf' => ['--as', '-o'],
-        'dwgread' => ['--format', 'json', '-o'],
+        'dwgread' => ['-O', '--format', 'json', '-o'],
         'dwglayers' => ['--flags'],
         'libreoffice' => ['--headless', '--convert-to', '--outdir'],
         'imagemagick' => ['-fuzz', '-trim', '-alpha'],
@@ -159,7 +159,8 @@ final class SymfonyProcessRunner implements ProcessRunner
         $stdout = '';
         $outputExceeded = false;
         $context = $this->context($operation, $stage);
-        $failureContext = $operation === 'info' ? [...$context, 'stderr' => self::OMITTED_DIAGNOSTIC] : $context;
+        $omitDiagnostic = \in_array($operation, ['layers', 'entities', 'info'], true);
+        $failureContext = $omitDiagnostic ? [...$context, 'stderr' => self::OMITTED_DIAGNOSTIC] : $context;
         $process = new Process($command, $workspace->directory());
         $process->setTimeout($timeout);
 
@@ -200,7 +201,7 @@ final class SymfonyProcessRunner implements ProcessRunner
                 ...$context,
                 'exit_code' => $process->getExitCode(),
                 // Query diagnostics may contain names or metadata that cannot be reliably redacted.
-                'stderr' => \in_array($operation, ['layers', 'entities', 'info'], true) ? self::OMITTED_DIAGNOSTIC : $this->summary($stderr),
+                'stderr' => $omitDiagnostic ? self::OMITTED_DIAGNOSTIC : $this->summary($stderr),
             ];
             if (($operation !== 'image' || $stage === 'dwg2dxf') && $this->isRejectedInput($stderr)) {
                 throw new InvalidDwg('libredwg_rejected_input', $context);
@@ -266,6 +267,10 @@ final class SymfonyProcessRunner implements ProcessRunner
      */
     private function hasCapability(string $help, string $capability): bool
     {
+        if ($capability === 'json') {
+            return \preg_match('/\bJSON\b/i', $help) === 1;
+        }
+
         if (! \str_starts_with($capability, '-')) {
             return \stripos($help, $capability) !== false;
         }
