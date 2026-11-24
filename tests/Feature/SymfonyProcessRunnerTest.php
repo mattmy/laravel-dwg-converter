@@ -213,29 +213,29 @@ it('maps process timeout without leaving a workspace', function (): void {
     }
 });
 
-it('omits private drawing diagnostics from the info timeout context', function (): void {
-    $workspace = Workspace::fromSource(DwgBinary::from('AC1032 drawing'), config()->string('dwg-converter.temporary_directory'), null, 'info');
+it('omits private drawing diagnostics from the metadata query timeout context', function (string $operation): void {
+    $workspace = Workspace::fromSource(DwgBinary::from('AC1032 drawing'), config()->string('dwg-converter.temporary_directory'), null, $operation);
 
     try {
         (new SymfonyProcessRunner())->run(
             [\PHP_BINARY, '-r', 'fwrite(STDERR, "private drawing metadata"); usleep(2000000);'],
             $workspace,
             0.1,
-            'info',
+            $operation,
             'dwgread',
         );
     } catch (DwgOperationFailed $failure) {
         expect($failure->reason())->toBe('process_timed_out')
-            ->and($failure->context())->toBe(['operation' => 'info', 'stage' => 'dwgread', 'stderr' => '[diagnostic omitted]'])
+            ->and($failure->context())->toBe(['operation' => $operation, 'stage' => 'dwgread', 'stderr' => '[diagnostic omitted]'])
             ->and($failure->getPrevious())->toBeInstanceOf(ProcessTimedOutException::class);
 
         return;
     } finally {
-        $workspace->cleanup('info');
+        $workspace->cleanup($operation);
     }
 
-    throw new RuntimeException('Expected info process timeout.');
-});
+    throw new RuntimeException('Expected metadata query process timeout.');
+})->with(['info', 'entities']);
 
 it('redacts paths from a generic process failure', function (): void {
     $workspace = Workspace::fromSource(
@@ -341,6 +341,7 @@ it('maps capture timeout while preserving its original exception', function (): 
         (new SymfonyProcessRunner())->capture([\PHP_BINARY, '-r', 'usleep(500000);'], $workspace, 0.05, 'layers', 'dwglayers', 1024);
     } catch (DwgOperationFailed $failure) {
         expect($failure->reason())->toBe('process_timed_out')
+            ->and($failure->context())->toBe(['operation' => 'layers', 'stage' => 'dwglayers', 'stderr' => '[diagnostic omitted]'])
             ->and($failure->getPrevious())->toBeInstanceOf(ProcessTimedOutException::class);
 
         return;

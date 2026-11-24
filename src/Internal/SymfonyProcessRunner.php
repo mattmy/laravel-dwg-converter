@@ -159,7 +159,8 @@ final class SymfonyProcessRunner implements ProcessRunner
         $stdout = '';
         $outputExceeded = false;
         $context = $this->context($operation, $stage);
-        $failureContext = $operation === 'info' ? [...$context, 'stderr' => self::OMITTED_DIAGNOSTIC] : $context;
+        $omitDiagnostic = \in_array($operation, ['layers', 'entities', 'info'], true);
+        $failureContext = $omitDiagnostic ? [...$context, 'stderr' => self::OMITTED_DIAGNOSTIC] : $context;
         $process = new Process($command, $workspace->directory());
         $process->setTimeout($timeout);
 
@@ -200,7 +201,7 @@ final class SymfonyProcessRunner implements ProcessRunner
                 ...$context,
                 'exit_code' => $process->getExitCode(),
                 // Query diagnostics may contain names or metadata that cannot be reliably redacted.
-                'stderr' => \in_array($operation, ['layers', 'entities', 'info'], true) ? self::OMITTED_DIAGNOSTIC : $this->summary($stderr),
+                'stderr' => $omitDiagnostic ? self::OMITTED_DIAGNOSTIC : $this->summary($stderr),
             ];
             if (($operation !== 'image' || $stage === 'dwg2dxf') && $this->isRejectedInput($stderr)) {
                 throw new InvalidDwg('libredwg_rejected_input', $context);
