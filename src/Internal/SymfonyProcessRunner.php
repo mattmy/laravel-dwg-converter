@@ -27,7 +27,7 @@ final class SymfonyProcessRunner implements ProcessRunner
     private const REQUIRED_CAPABILITIES = [
         'dwgbmp' => ['dwgfile'],
         'dwg2dxf' => ['--as', '-o'],
-        'dwgread' => ['--format', 'json', '-o'],
+        'dwgread' => ['-O', '--format', 'json', '-o'],
         'dwglayers' => ['--flags'],
         'libreoffice' => ['--headless', '--convert-to', '--outdir'],
         'imagemagick' => ['-fuzz', '-trim', '-alpha'],
@@ -266,6 +266,10 @@ final class SymfonyProcessRunner implements ProcessRunner
      */
     private function hasCapability(string $help, string $capability): bool
     {
+        if ($capability === 'json') {
+            return \preg_match('/\bJSON\b/i', $help) === 1;
+        }
+
         if (! \str_starts_with($capability, '-')) {
             return \stripos($help, $capability) !== false;
         }

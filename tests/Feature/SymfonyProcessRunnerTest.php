@@ -59,7 +59,7 @@ it('accepts a tool only when its required CLI shape is present', function (
 })->with([
     'dwgbmp' => ['thumbnail', 'dwgbmp', 'dwgbmp 0.14', 'Usage: dwgbmp DWGFILE'],
     'dwg2dxf' => ['dxf', 'dwg2dxf', 'dwg2dxf 0.14', 'Usage: dwg2dxf --as version -o outfile DWGFILE'],
-    'dwgread' => ['json', 'dwgread', 'dwgread 0.14', 'Usage: dwgread --format fmt JSON -o outfile DWGFILE'],
+    'dwgread' => ['json', 'dwgread', 'dwgread 0.14', 'Usage: dwgread -O fmt, --format fmt JSON -o outfile DWGFILE'],
     'dwglayers' => ['layers', 'dwglayers', 'dwglayers 0.14', 'Usage: dwglayers --flags DWGFILE'],
     'LibreOffice' => ['image', 'libreoffice', 'LibreOffice 7.4.0', 'Usage: soffice --headless --convert-to fmt --outdir dir'],
     'ImageMagick' => ['image', 'imagemagick', 'Version: ImageMagick 7.0.0', 'Usage: magick -fuzz value -trim -alpha value'],
@@ -402,4 +402,6 @@ it('rejects help that only advertises a lookalike for a required option', functi
 })->with([
     'longer flag name' => ['dwglayers', 'Usage: dwglayers --flags-extra DWGFILE'],
     'different short option' => ['dwgread', 'Usage: dwgread -O fmt, --format fmt JSON DWGFILE'],
+    'missing uppercase output format option' => ['dwgread', 'Usage: dwgread --format fmt JSON -o outfile DWGFILE'],
+    'different JSON formats' => ['dwgread', 'Usage: dwgread -O fmt, --format fmt minJSON GeoJSON -o outfile DWGFILE'],
 ]);
