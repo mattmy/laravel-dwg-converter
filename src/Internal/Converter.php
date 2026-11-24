@@ -946,7 +946,7 @@ final class Converter
             ImageFormat::JPEG => $this->isJpeg($path, $size),
             ImageFormat::WEBP => $this->isWebp($path, $size),
         };
-        $image = $this->imageInfo($path);
+        $image = $structureIsValid ? $this->imageInfo($path) : null;
         $expectedType = match ($format) {
             ImageFormat::PNG => \IMAGETYPE_PNG,
             ImageFormat::JPEG => \IMAGETYPE_JPEG,
@@ -955,8 +955,7 @@ final class Converter
         $width = $image['width'] ?? 0;
         $height = $image['height'] ?? 0;
         if (
-            ! $structureIsValid
-            || ($image['type'] ?? 0) !== $expectedType
+            ($image['type'] ?? 0) !== $expectedType
             || $width < 1
             || $height < 1
         ) {
@@ -992,7 +991,7 @@ final class Converter
     }
 
     /**
-     * Confirm a complete RIFF WebP container header.
+     * Check RIFF boundaries and require a non-empty static WebP image chunk.
      */
     private function isWebp(string $path, int $size): bool
     {
@@ -1004,11 +1003,35 @@ final class Converter
         $riff = \is_string($header) ? \unpack('Vsize', \substr($header, 4, 4)) : false;
         $riffSize = $riff['size'] ?? null;
 
-        return \is_string($header)
-            && \substr($header, 0, 4) === 'RIFF'
-            && \substr($header, 8, 4) === 'WEBP'
-            && \is_int($riffSize)
-            && $riffSize + 8 === $size;
+        if (! \is_string($header) || \substr($header, 0, 4) !== 'RIFF'
+            || \substr($header, 8, 4) !== 'WEBP' || $riffSize !== $size - 8) {
+            return false;
+        }
+
+        $offset = 12;
+        $hasImageData = false;
+        while ($offset <= $size - 8) {
+            $chunk = \file_get_contents($path, false, null, $offset, 8);
+            if (! \is_string($chunk) || \strlen($chunk) !== 8) {
+                return false;
+            }
+            $length = \unpack('Vlength', $chunk, 4)['length'] ?? null;
+            if (! \is_int($length) || $length < 0 || $length > $size - $offset - 8) {
+                return false;
+            }
+            if ($length > 0 && \in_array(\substr($chunk, 0, 4), ['VP8 ', 'VP8L'], true)) {
+                $hasImageData = true;
+            }
+            $offset += 8 + $length;
+            if ($length % 2 !== 0) {
+                if ($offset === $size || \file_get_contents($path, false, null, $offset, 1) !== "\0") {
+                    return false;
+                }
+                $offset++;
+            }
+        }
+
+        return $hasImageData && $offset === $size;
     }
 
     /**

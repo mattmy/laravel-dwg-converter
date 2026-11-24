@@ -20,13 +20,29 @@ function jpegFixture(int $width = 16, int $height = 12): string
     return "\xff\xd8\xff\xc0\0\x0b\x08" . \pack('n2', $height, $width) . "\x01\x01\x11\0\xff\xd9";
 }
 
-/** Build a minimal extended WebP carrying canvas dimensions. */
-function webpFixture(int $width = 16, int $height = 12): string
+/** Return an encoded 16-by-12 white WebP in either supported static encoding. */
+function webpFixture(bool $lossless = false): string
+{
+    $encoded = $lossless
+        ? 'UklGRh4AAABXRUJQVlA4TBEAAAAvD8ACAAfQ//73v/+BiOh/AAA='
+        : 'UklGRiQAAABXRUJQVlA4IBgAAAAwAQCdASoQAAwAAgA0JaQAA3AA/vuUAAA=';
+
+    return \base64_decode($encoded);
+}
+
+/** Wrap a supplied chunk sequence in a RIFF WebP container. */
+function webpRiff(string $chunks): string
+{
+    return 'RIFF' . \pack('V', 4 + \strlen($chunks)) . 'WEBP' . $chunks;
+}
+
+/** Build a VP8X canvas header for tests of WebP metadata boundaries. */
+function webpCanvas(int $width = 16, int $height = 12): string
 {
     $dimension = static fn (int $value): string => \substr(\pack('V', $value - 1), 0, 3);
     $payload = \str_repeat("\0", 4) . $dimension($width) . $dimension($height);
 
-    return 'RIFF' . \pack('V', 22) . 'WEBPVP8X' . \pack('V', 10) . $payload;
+    return 'VP8X' . \pack('V', 10) . $payload;
 }
 
 /** Return representative bytes for one supported output format. */
@@ -253,7 +269,8 @@ it('rejects an image preview with a zero dimension', function (): void {
 });
 
 it('accepts positive image dimensions above the former pixel limit', function (): void {
-    $contents = webpFixture(32_769, 32_769);
+    // Advertise a large canvas without encoding that many pixels for a metadata-only check.
+    $contents = webpRiff(webpCanvas(32_769, 32_769) . \substr(webpFixture(lossless: true), 12));
     app()->instance(ProcessRunner::class, new FakeProcessRunner(static function (array $command, Workspace $workspace) use ($contents): void {
         match ($command[0]) {
             'dwg2dxf' => \file_put_contents($workspace->outputPath('drawing.dxf'), "0\nSECTION\n2\nENTITIES\n0\nENDSEC\n0\nEOF\n"),
@@ -290,6 +307,17 @@ it('rejects malformed final images', function (ImageFormat $format, string $cont
     'JPEG truncated header' => [ImageFormat::JPEG, 'R'],
     'WebP signature' => [ImageFormat::WEBP, 'not an image'],
     'WebP truncated header' => [ImageFormat::WEBP, 'R'],
+    'WebP has only canvas dimensions' => [ImageFormat::WEBP, webpRiff(webpCanvas())],
+    'WebP image chunk is empty' => [ImageFormat::WEBP, webpRiff(webpCanvas() . 'VP8L' . \pack('V', 0))],
+    'WebP image chunk exceeds the RIFF boundary' => [ImageFormat::WEBP, \substr_replace(webpFixture(), \pack('V', 100), 16, 4)],
+    'WebP trailing chunk exceeds the RIFF boundary' => [
+        ImageFormat::WEBP,
+        webpRiff(\substr(webpFixture(), 12) . 'EXIF' . \pack('V', 4) . 'ab'),
+    ],
+    'WebP odd chunk lacks padding' => [
+        ImageFormat::WEBP,
+        webpRiff(\substr(webpFixture(), 12) . 'EXIF' . \pack('V', 1) . 'a'),
+    ],
 ]);
 
 it('uses a random stem for binary sources when no storage name is provided', function (): void {
