@@ -10,13 +10,13 @@ JPEG, or WebP previews also requires LibreOffice and ImageMagick.
 
 - Extract embedded DWG thumbnails.
 - Read layer names and frozen, off, and locked states.
-- Read, filter, and count entity data
+- [Read, filter, and count stored entities](https://mattmy.github.io/laravel-dwg-converter-doc/guide/entities).
 - Identify the stored DWG format and read basic drawing information.
 - Convert DWG files to ASCII DXF.
 - Export DWG files as structural JSON.
 - Create PNG, JPEG, or WebP previews.
-- Accept uploaded files, local paths, or DWG bytes.
-- Store or stream results with Laravel Storage.
+- Accept uploaded files, local absolute paths, or DWG bytes.
+- Stream generated files to Laravel Storage or read their bytes in PHP.
 
 ## Requirements
 
@@ -24,12 +24,9 @@ JPEG, or WebP previews also requires LibreOffice and ImageMagick.
 |---|---|
 | PHP | 8.2 or later |
 | Laravel | 12 or 13 |
-| CI-tested combinations | PHP 8.2 with Laravel 12; PHP 8.3–8.5 with Laravel 12–13, including PHP 8.2 / Laravel 12 lowest and current boundaries |
+| CI-tested combinations | PHP 8.2 with Laravel 12, and PHP 8.3 to 8.5 with Laravel 12 or 13 |
 
-Laravel 13 requires PHP 8.3 or later.
-
-External commands are feature-specific. You do not need LibreOffice or ImageMagick when you only extract
-thumbnails, create DXF, or export JSON.
+Laravel 13 requires PHP 8.3 or later. CI tests both the lowest and current dependencies on PHP 8.2 with Laravel 12.
 
 ## External commands by operation
 
@@ -38,7 +35,7 @@ thumbnails, create DXF, or export JSON.
 | `Dwg::thumbnail(...)->extract()` | LibreDWG `dwgbmp` |
 | `Dwg::toDxf(...)->convert()` | LibreDWG `dwg2dxf` |
 | `Dwg::toJson(...)->convert()` | LibreDWG `dwgread` with JSON output support |
-| `Dwg::layers(...)->read()` | LibreDWG `dwglayers --flags` |
+| `Dwg::layers(...)->read()` | LibreDWG `dwglayers` with `--flags` and, for `onlyOn()`, `--on` |
 | `Dwg::entities(...)->read()` | LibreDWG `dwgread` with JSON output support |
 | `Dwg::version(...)` | None |
 | `Dwg::info(...)->read()` | LibreDWG `dwgread` with JSON output support |
@@ -50,19 +47,18 @@ bundle these tools. For LibreDWG installation, see the
 [external tools guide](https://mattmy.github.io/laravel-dwg-converter-doc/guide/external-tools) covers
 LibreOffice and ImageMagick installation on Ubuntu/Debian, RHEL/Fedora, and Windows.
 
-The Unit/Feature CI matrix uses fake processes and does not install external converters. End-to-end
-external-tool verification has been completed locally on Windows; reproducible Linux verification remains
-pending a redistributable DWG corpus and a pinned toolchain.
+The CI matrix tests PHP and Laravel compatibility with simulated tool output. The full conversion pipeline
+has been tested locally on Windows.
 
 ## Installation
-
-Install the package with Composer:
 
 ```bash
 composer require mattmy/laravel-dwg-converter
 ```
 
-If a required command is not on `PATH`, publish the configuration and provide its absolute path:
+For commands outside `PATH`, set their absolute paths using the
+[tool environment variables](https://mattmy.github.io/laravel-dwg-converter-doc/guide/configuration#executables).
+To edit the full configuration, publish it with this command.
 
 ```bash
 php artisan vendor:publish --tag=dwg-converter-config
@@ -70,8 +66,7 @@ php artisan vendor:publish --tag=dwg-converter-config
 
 ## Quick start
 
-This example extracts the DWG's embedded preview and streams it to Laravel's default disk. The source is
-an `UploadedFile` from a validated request.
+Pass a validated `UploadedFile` to extract its embedded preview and save it to Laravel's default disk.
 
 ```php
 use Mattmy\DwgConverter\Facades\Dwg;
@@ -83,9 +78,10 @@ $path = $thumbnail->storeAs(
 );
 ```
 
-A DWG may not contain an embedded thumbnail. Use image conversion when you need a rendered preview:
+A DWG without an embedded preview raises `thumbnail_not_found`. Use `toImage()` to render a preview of the model space.
 
 ```php
+use Mattmy\DwgConverter\Facades\Dwg;
 use Mattmy\DwgConverter\ImageFormat;
 use Mattmy\DwgConverter\ImageResolution;
 
@@ -97,43 +93,42 @@ $image = Dwg::toImage(storage_path('app/private/floor-plan.dwg'))
 $path = $image->storeAs('drawing-previews', 'floor-plan.webp', 's3');
 ```
 
-Image conversion renders a best-effort preview of the entire model space. It does not split multiple
-drawings or guarantee paper-space, viewport, font, or external reference fidelity.
+Each conversion produces one best-effort preview of the entire model space. See the
+[image preview guide](https://mattmy.github.io/laravel-dwg-converter-doc/guide/image-previews#output-limits)
+for rendering limitations.
 
 ## Inputs and outputs
 
 Every operation accepts a valid `UploadedFile`, a local absolute path, or bytes explicitly wrapped with
 `DwgBinary::from($bytes)`. A plain string is always treated as a path.
 
-Each successful file operation returns a one-time `DwgOutput`:
+File conversions and thumbnail extraction return a `DwgOutput`. Call either `storeAs()` or `output()`
+once per result. If it fails, rerun the original operation to get a fresh result.
 
-- `extension()` and `mimeType()` inspect trusted output metadata without consuming it.
-- `storeAs()` streams the artifact to Laravel Storage and then attempts temporary cleanup.
-- `DwgOutput` cannot be cloned, serialized, or unserialized; these attempts throw `LogicException`.
-- `output()` returns all bytes as a string and should only be used for outputs that safely fit in PHP memory.
+- `extension()` and `mimeType()` can be read repeatedly.
+- `storeAs()` streams the file to Laravel Storage.
+- `output()` loads the full file into PHP memory.
+- Cloning, serializing, or unserializing a `DwgOutput` throws `LogicException`.
 
 ## Errors and operational limits
 
-Temporary cleanup failures emit a sanitized `warning` through Laravel's default logger without
-interrupting conversion or delivery. Temporary files may remain; consumed results do not retry cleanup.
-Logger failures also leave the operation's result or original exception unchanged.
-
 Failures use `LibreDwgUnavailable`, `InvalidDwg`, or `DwgOperationFailed`. Each exception provides a stable
-`reason()` and sanitized scalar `context()`.
+`reason()` and sanitized `context()`. If temporary cleanup fails, the package keeps the original result or
+exception and attempts to log a warning. See the
+[troubleshooting guide](https://mattmy.github.io/laravel-dwg-converter-doc/guide/errors-and-troubleshooting).
 
-The applicable defaults for file operations, layer queries, and drawing information are 200 MiB input, 512 MiB general
-output, and 64 MiB JSON output. Set a byte limit to
-`null`, zero, or a negative integer to disable it. Keep positive limits and run untrusted DWG conversions in
-a resource-limited worker or container.
+The default byte limits are 200 MiB for input, 512 MiB for general output, and 64 MiB for JSON output.
+See [which limits apply to each operation](https://mattmy.github.io/laravel-dwg-converter-doc/guide/configuration#runtime-settings).
+Set a limit to `null`, zero, or a negative integer to disable it.
 
-Successful conversion means the configured tools completed the requested operation and the artifact passed
-the package's format checks. It is not a DWG safety certification, a full conformance check, or an AutoCAD
-visual-fidelity guarantee.
+Keep applicable limits enabled for untrusted DWGs and run conversions in a resource-limited worker or
+container. The package checks basic output structure. Test representative files in your target CAD software
+if fidelity matters.
 
 ## Documentation
 
-Read the complete English and Traditional Chinese documentation at
-[mattmy.github.io/laravel-dwg-converter-doc](https://mattmy.github.io/laravel-dwg-converter-doc/).
+- [English documentation](https://mattmy.github.io/laravel-dwg-converter-doc/)
+- [Traditional Chinese documentation](https://mattmy.github.io/laravel-dwg-converter-doc/zh-TW/)
 
 ## Changelog
 
