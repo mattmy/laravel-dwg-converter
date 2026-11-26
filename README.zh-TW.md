@@ -2,21 +2,20 @@
 
 [English](README.md)
 
-Laravel DWG Converter 將 LibreDWG 命令列工具整合至 Laravel 應用，
-用於擷取 DWG 檔案的內嵌縮圖，以及將 DWG 檔案轉換為 DXF 或結構 JSON。
+Laravel DWG Converter 在 Laravel 中呼叫 LibreDWG 命令列工具，擷取 DWG 的內嵌縮圖，並輸出 DXF 或結構 JSON。
 建立 PNG、JPEG 或 WebP 預覽還需要 LibreOffice 與 ImageMagick。
 
 ## 功能特色
 
 - 擷取 DWG 內嵌縮圖。
 - 查詢圖層名稱與凍結、關閉、鎖定狀態。
-- 讀取、篩選與統計圖元資料
+- [讀取、篩選及計算已儲存的圖元](https://mattmy.github.io/laravel-dwg-converter-doc/zh-TW/guide/entities)。
 - 辨識 DWG 儲存格式並讀取基本圖面資訊。
 - 將 DWG 轉換為 ASCII DXF。
 - 將 DWG 輸出為結構 JSON。
 - 建立 PNG、JPEG 或 WebP 預覽。
-- 接受上傳檔案、local path 或 DWG bytes。
-- 透過 Laravel Storage 儲存或串流結果。
+- 接受上傳檔案、本機絕對路徑或 DWG 位元組。
+- 將產出的檔案串流寫入 Laravel Storage，或直接在 PHP 讀取位元組。
 
 ## 系統需求
 
@@ -24,43 +23,38 @@ Laravel DWG Converter 將 LibreDWG 命令列工具整合至 Laravel 應用，
 |---|---|
 | PHP | 8.2 或更新版本 |
 | Laravel | 12 或 13 |
-| CI 實測組合 | PHP 8.2 搭配 Laravel 12；PHP 8.3–8.5 搭配 Laravel 12–13，包含 PHP 8.2／Laravel 12 lowest 與 current boundary |
+| CI 測試組合 | PHP 8.2 搭配 Laravel 12，以及 PHP 8.3 至 8.5 搭配 Laravel 12 或 13 |
 
-Laravel 13 需要 PHP 8.3 或更新版本。
+Laravel 13 需要 PHP 8.3 或更新版本。CI 在 PHP 8.2 搭配 Laravel 12 時，會分別測試最低與目前可用的相依版本。
 
-外部 commands 依功能而異。只擷取縮圖、建立 DXF 或輸出 JSON 時，不需要安裝 LibreOffice 或
-ImageMagick。
+## 各操作需要的外部命令
 
-## 各操作需要的外部 commands
-
-| 操作 | 必要 commands |
+| 操作 | 必要命令 |
 |---|---|
 | `Dwg::thumbnail(...)->extract()` | LibreDWG `dwgbmp` |
 | `Dwg::toDxf(...)->convert()` | LibreDWG `dwg2dxf` |
-| `Dwg::toJson(...)->convert()` | 具 JSON output 能力的 LibreDWG `dwgread` |
-| `Dwg::layers(...)->read()` | LibreDWG `dwglayers --flags` |
+| `Dwg::toJson(...)->convert()` | 支援 JSON 輸出的 LibreDWG `dwgread` |
+| `Dwg::layers(...)->read()` | 支援 `--flags` 的 LibreDWG `dwglayers`，使用 `onlyOn()` 時也需要 `--on` |
 | `Dwg::entities(...)->read()` | 支援 JSON 輸出的 LibreDWG `dwgread` |
 | `Dwg::version(...)` | 無 |
 | `Dwg::info(...)->read()` | 支援 JSON 輸出的 LibreDWG `dwgread` |
 | `Dwg::toImage(...)->convert()` | LibreDWG `dwg2dxf`、LibreOffice 7.4+ `soffice`、ImageMagick 7 `magick` |
 
 請使用仍受維護且包含最新安全修補的 LibreDWG 版本。本套件不會下載或附帶這些工具。LibreDWG 安裝方式請參考
-[LibreDWG 官方 repository](https://github.com/libredwg/libredwg)。
+[LibreDWG 官方儲存庫](https://github.com/libredwg/libredwg)。
 [外部工具指南](https://mattmy.github.io/laravel-dwg-converter-doc/zh-TW/guide/external-tools)提供
 Ubuntu／Debian、RHEL／Fedora 與 Windows 的 LibreOffice、ImageMagick 安裝方式。
 
-Unit／Feature CI matrix 使用 fake process，不安裝外部轉換工具。外部工具的端對端驗證已在 Windows
-本機完成；可重現的 Linux 驗證仍待取得可再散布的 DWG corpus 與固定 toolchain。
+CI 使用模擬的工具輸出驗證 PHP 與 Laravel 的相容性。完整轉換流程已在 Windows 本機驗證。
 
 ## 安裝
-
-透過 Composer 安裝套件：
 
 ```bash
 composer require mattmy/laravel-dwg-converter
 ```
 
-必要 command 不在 `PATH` 時，請發布設定並填入它的絕對路徑：
+命令不在 `PATH` 時，可用[工具環境變數](https://mattmy.github.io/laravel-dwg-converter-doc/zh-TW/guide/configuration#executables)
+指定絕對路徑。要修改完整設定，可執行下列命令發布設定檔。
 
 ```bash
 php artisan vendor:publish --tag=dwg-converter-config
@@ -68,8 +62,7 @@ php artisan vendor:publish --tag=dwg-converter-config
 
 ## 快速開始
 
-下方範例會擷取 DWG 的內嵌預覽，再串流至 Laravel 預設 disk。來源是已通過 request 驗證的
-`UploadedFile`。
+傳入已驗證的 `UploadedFile`，即可擷取內嵌預覽並儲存到 Laravel 預設磁碟。
 
 ```php
 use Mattmy\DwgConverter\Facades\Dwg;
@@ -81,9 +74,10 @@ $path = $thumbnail->storeAs(
 );
 ```
 
-DWG 不一定包含內嵌縮圖。需要渲染預覽時，請使用圖片轉換：
+DWG 若沒有內嵌預覽，會回報 `thumbnail_not_found`。要渲染模型空間的預覽，可使用 `toImage()`。
 
 ```php
+use Mattmy\DwgConverter\Facades\Dwg;
 use Mattmy\DwgConverter\ImageFormat;
 use Mattmy\DwgConverter\ImageResolution;
 
@@ -95,39 +89,39 @@ $image = Dwg::toImage(storage_path('app/private/floor-plan.dwg'))
 $path = $image->storeAs('drawing-previews', 'floor-plan.webp', 's3');
 ```
 
-圖片轉換會盡可能呈現整個模型空間，不會自動拆分多張圖，也不保證圖紙空間、視埠、字型或外部參考的呈現保真。
+每次成功的轉換會產出一張涵蓋整個模型空間的預覽。呈現上的限制見
+[圖片預覽指南](https://mattmy.github.io/laravel-dwg-converter-doc/zh-TW/guide/image-previews#輸出限制)。
 
 ## 輸入與輸出
 
-每個操作都接受有效的 `UploadedFile`、local absolute path，或以 `DwgBinary::from($bytes)` 明確包裝的
-bytes。普通 string 一律視為 path。
+每個操作都接受有效的 `UploadedFile`、本機絕對路徑，或以 `DwgBinary::from($bytes)` 包裝的
+DWG 位元組。直接傳入的字串會當成本機絕對路徑。
 
-每次成功的檔案操作都回傳一次性的 `DwgOutput`：
+轉換與縮圖擷取會回傳 `DwgOutput`。每份結果只能從 `storeAs()` 和 `output()` 選一個呼叫一次。
+若呼叫失敗，請重新執行原操作取得新結果。
 
-- `extension()` 與 `mimeType()` 可在不消費結果的情況下讀取可信的輸出資訊。
-- `storeAs()` 將產物串流至 Laravel Storage，之後嘗試清理暫存資源。
-- `DwgOutput` 不可複製、序列化或反序列化；這些嘗試會拋出 `LogicException`。
-- `output()` 將全部 bytes 讀入 string，只適合能安全放入 PHP 記憶體的輸出。
+- `extension()` 與 `mimeType()` 可重複讀取。
+- `storeAs()` 將檔案串流寫入 Laravel Storage。
+- `output()` 將整份檔案讀入 PHP 記憶體。
+- 複製、序列化或反序列化 `DwgOutput` 會拋出 `LogicException`。
 
 ## 錯誤與操作限制
 
-暫存清理失敗時，套件會透過 Laravel 預設 logger 記錄去敏的 `warning`，不會中斷轉換或交付。
-暫存檔可能殘留，已消費結果不會重試清理；Log 寫入失敗也不改變主功能結果或原始例外。
-
 失敗時會拋出 `LibreDwgUnavailable`、`InvalidDwg` 或 `DwgOperationFailed`。每個例外都提供穩定的
-`reason()` 與去敏後的 scalar `context()`。
+`reason()` 與已移除敏感資訊的 `context()`。暫存清理失敗時，套件會保留原本的結果或例外，並嘗試記錄警告。
+詳見[錯誤與疑難排解](https://mattmy.github.io/laravel-dwg-converter-doc/zh-TW/guide/errors-and-troubleshooting)。
 
-檔案操作、圖層查詢與圖面資訊讀取依各自適用的上限執行，預設為 200 MiB 輸入、512 MiB 一般輸出及 64 MiB JSON 輸出。將 byte limit 設為 `null`、零或
-負整數即可停用。處理不可信 DWG 時，應保留正整數上限，並在有限制資源的 worker 或 container
-執行轉換。
+預設大小上限為輸入 200 MiB、一般輸出 512 MiB、JSON 輸出 64 MiB。
+各操作適用的上限見[執行設定](https://mattmy.github.io/laravel-dwg-converter-doc/zh-TW/guide/configuration#runtime-設定)。
+將上限設為 `null`、零或負整數即可停用。
 
-轉換成功只代表設定的工具完成本次操作，而且產物通過套件的格式檢查；不代表 DWG 已通過安全認證、
-完整 conformance 檢查或 AutoCAD 視覺保真驗證。
+處理不可信的 DWG 時，請啟用適用的大小上限，並在有資源限制的工作程序或容器中轉換。
+套件會檢查產物的基本結構。若需要確認轉換保真度，請用代表性的圖檔在目標 CAD 軟體中測試。
 
 ## 完整文件
 
-完整英文及繁體中文文件位於
-[mattmy.github.io/laravel-dwg-converter-doc](https://mattmy.github.io/laravel-dwg-converter-doc/zh-TW/)。
+- [繁體中文文件](https://mattmy.github.io/laravel-dwg-converter-doc/zh-TW/)
+- [英文文件](https://mattmy.github.io/laravel-dwg-converter-doc/)
 
 ## Changelog
 
@@ -135,5 +129,5 @@ bytes。普通 string 一律視為 path。
 
 ## License
 
-Laravel DWG Converter 使用 [MIT License](LICENSE) 發布。LibreDWG 是另外安裝與分發的 GPLv3+
-軟體；LibreOffice 與 ImageMagick 也由使用者另外安裝，並適用各自的授權條款。
+Laravel DWG Converter 採用 [MIT 授權](LICENSE)。LibreDWG 依 GPLv3+ 授權獨立散布。
+LibreOffice 與 ImageMagick 也需另外安裝，並適用各自的授權條款。
