@@ -3,6 +3,8 @@
 declare(strict_types=1);
 
 use Mattmy\DwgConverter\DwgBinary;
+use Mattmy\DwgConverter\DwgCustomProperty;
+use Mattmy\DwgConverter\DwgDrawingUnitStatus;
 use Mattmy\DwgConverter\DwgEntity;
 use Mattmy\DwgConverter\DwgLayer;
 use Mattmy\DwgConverter\DxfVersion;
@@ -44,6 +46,27 @@ $missingJsonDependency = $source === ''
     || $executables['dwgread'] === ''
     || ! \is_file($executables['dwgread']);
 $integrationSkipReason = 'Set DWG_CONVERTER_TEST_DWG, DWG_CONVERTER_TEST_IMAGE_DWG, and all executable environment variables.';
+
+it('reads known metadata from a real drawing', function (): void {
+    $info = Dwg::info(__DIR__ . '/../Fixtures/drawing-info.dwg')->read();
+
+    expect($info->version->code)->toBe('AC1024')
+        ->and($info->version->format)->toBe('R2010');
+    expect($info->drawingUnits->code)->toBe(0)
+        ->and($info->drawingUnits->status)->toBe(DwgDrawingUnitStatus::UNSPECIFIED);
+    expect($info->summary?->title)->toBe('R18 synthetic drawing')
+        ->and($info->summary?->subject)->toBe('Drawing information')
+        ->and($info->summary?->author)->toBe('DWG Converter tests');
+    expect(\array_map(
+        static fn (DwgCustomProperty $property): array => [$property->name, $property->value],
+        $info->summary->customProperties ?? [],
+    ))->toBe([['KEY', '0017'], ['KEY', ' A-101 ']]);
+    expect($info->timestamps?->createdAt)->toBe('1970-01-01T12:34:56.123Z')
+        ->and($info->timestamps?->lastSavedAt)->toBe('2000-01-01T23:59:59.999Z');
+})->skip(
+    $executables['dwgread'] === '' || ! \is_file($executables['dwgread']),
+    'Set LIBREDWG_DWGREAD.',
+);
 
 it('reads real stored entities and rejects a forged entity source', function () use ($source): void {
     $result = Dwg::entities($source)->read();
