@@ -65,8 +65,8 @@ it('accepts a tool only when its required CLI shape is present', function (
     'ImageMagick' => ['image', 'imagemagick', 'Version: ImageMagick 7.0.0', 'Usage: magick -fuzz value -trim -alpha value'],
 ]);
 
-it('rejects a named tool that lacks its required CLI shape', function (): void {
-    $executable = capabilityProbeExecutable('dwgread 0.14', 'Usage: dwgread DWGFILE');
+it('rejects a named tool that lacks its required CLI shape', function (string $help): void {
+    $executable = capabilityProbeExecutable('dwgread 0.14', $help);
 
     try {
         expect(fn () => (new SymfonyProcessRunner())->assertAvailable($executable, 'json', 'dwgread', 'dwgread'))
@@ -74,7 +74,10 @@ it('rejects a named tool that lacks its required CLI shape', function (): void {
     } finally {
         \unlink($executable);
     }
-});
+})->with([
+    'missing output options' => ['Usage: dwgread DWGFILE'],
+    'JSON disabled' => ["  -O fmt,  --format fmt     fmt: DXF, DXFB\n  -o outfile"],
+]);
 
 it('rejects tools below the required capability version', function (
     string $tool,

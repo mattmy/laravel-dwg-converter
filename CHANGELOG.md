@@ -6,6 +6,14 @@ All notable changes to this project will be documented in this file. Laravel DWG
 
 ## [Unreleased]
 
+## [0.7.2]
+
+### Changed
+
+- Speed up entity queries with many selected layers by looking up layer names without scanning the selection for each entity.
+- Reuse the validated file size when checking DXF, thumbnail, and preview image structure.
+- Clarify tool setup and usage in the English and Traditional Chinese READMEs.
+
 ## [0.7.1]
 
 ### Fixed
@@ -135,7 +143,8 @@ All notable changes to this project will be documented in this file. Laravel DWG
 - Add `Dwg::toJson($source)->convert()` for validated LibreDWG structural JSON output.
 - Allow missing, null, zero, and negative byte-limit settings to disable their respective limits.
 
-[Unreleased]: https://github.com/mattmy/laravel-dwg-converter/compare/v0.7.1...HEAD
+[Unreleased]: https://github.com/mattmy/laravel-dwg-converter/compare/v0.7.2...HEAD
+[0.7.2]: https://github.com/mattmy/laravel-dwg-converter/compare/v0.7.1...v0.7.2
 [0.7.1]: https://github.com/mattmy/laravel-dwg-converter/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/mattmy/laravel-dwg-converter/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/mattmy/laravel-dwg-converter/compare/v0.5.1...v0.6.0
