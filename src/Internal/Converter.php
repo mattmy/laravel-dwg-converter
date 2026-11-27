@@ -99,8 +99,8 @@ final class Converter
                 $configuration['timeout'],
                 $operation,
             );
-            $this->assertBoundedFile($output, $workspace, $operation, $configuration['max_output_bytes']);
-            $this->assertDxf($output);
+            $size = $this->boundedFileSize($output, $workspace, $operation, $configuration['max_output_bytes']);
+            $this->assertDxf($output, $size);
 
             return new DwgOutput($workspace, $output, 'dxf', 'image/vnd.dxf', $configuration['max_output_bytes'], $operation, $sourceStem);
         } catch (Throwable $exception) {
@@ -181,8 +181,8 @@ final class Converter
                 $operation,
                 'dwg2dxf',
             );
-            $this->assertBoundedFile($dxf, $workspace, $operation, $dxfConfiguration['max_output_bytes']);
-            $this->assertDxf($dxf, $operation);
+            $size = $this->boundedFileSize($dxf, $workspace, $operation, $dxfConfiguration['max_output_bytes']);
+            $this->assertDxf($dxf, $size, $operation);
 
             $this->processRunner->assertAvailable($libreOfficeConfiguration['executable'], $operation, 'libreoffice', 'libreoffice');
             $this->processRunner->run(
@@ -299,7 +299,7 @@ final class Converter
 
         try {
             $output = $this->writeJson($workspace, $configuration, 'entities');
-            $this->assertBoundedFile($output, $workspace, 'entities', null);
+            $this->boundedFileSize($output, $workspace, 'entities', null);
 
             return (new EntityParser())->parse($this->readJson($output, 'entities'), $layers);
         } finally {
@@ -323,7 +323,7 @@ final class Converter
         try {
             $version = DwgHeader::read($workspace->inputPath(), $operation);
             $output = $this->writeJson($workspace, $configuration, $operation);
-            $this->assertBoundedFile($output, $workspace, $operation, $configuration['effective_output_limit']);
+            $this->boundedFileSize($output, $workspace, $operation, $configuration['effective_output_limit']);
 
             return InfoParser::parse($this->readJson($output, $operation), $version);
         } finally {
@@ -579,10 +579,9 @@ final class Converter
      */
     private function thumbnailType(string $path, Workspace $workspace, ?int $maxOutputBytes): array
     {
-        $this->assertBoundedFile($path, $workspace, 'thumbnail', $maxOutputBytes);
-        $size = \filesize($path);
+        $size = $this->boundedFileSize($path, $workspace, 'thumbnail', $maxOutputBytes);
         $header = \file_get_contents($path, false, null, 0, 8);
-        if (! \is_int($size) || ! \is_string($header)) {
+        if (! \is_string($header)) {
             throw new DwgOperationFailed('thumbnail_invalid', ['operation' => 'thumbnail']);
         }
 
@@ -836,16 +835,18 @@ final class Converter
     }
 
     /**
-     * Confirm that LibreDWG produced a bounded regular file.
+     * Return the size of a checked output file.
+     *
+     * @return positive-int
      *
      * @throws DwgOperationFailed
      */
-    private function assertBoundedFile(
+    private function boundedFileSize(
         string $path,
         Workspace $workspace,
         string $operation,
         ?int $maxOutputBytes,
-    ): void {
+    ): int {
         \clearstatcache(true, $path);
 
         if (\is_link($path) || ! \is_file($path) || ! $workspace->owns($path)) {
@@ -860,20 +861,19 @@ final class Converter
         if ($maxOutputBytes !== null && $size > $maxOutputBytes) {
             throw new DwgOperationFailed('output_too_large', ['operation' => $operation]);
         }
+
+        return $size;
     }
 
     /**
      * Perform the minimum structural check for an ASCII DXF artifact.
      *
+     * @param  positive-int  $size
+     *
      * @throws DwgOperationFailed
      */
-    private function assertDxf(string $path, string $operation = 'dxf'): void
+    private function assertDxf(string $path, int $size, string $operation = 'dxf'): void
     {
-        $size = \filesize($path);
-        if (! \is_int($size)) {
-            throw new DwgOperationFailed('dxf_invalid', ['operation' => $operation]);
-        }
-
         $head = \file_get_contents($path, false, null, 0, \min($size, 4096));
         $tailOffset = \max(0, $size - 4096);
         $tail = \file_get_contents($path, false, null, $tailOffset);
@@ -914,7 +914,7 @@ final class Converter
      */
     private function assertJson(string $path, Workspace $workspace, ?int $maxOutputBytes): void
     {
-        $this->assertBoundedFile($path, $workspace, 'json', $maxOutputBytes);
+        $this->boundedFileSize($path, $workspace, 'json', $maxOutputBytes);
 
         try {
             \json_decode($this->readJson($path, 'json'), flags: \JSON_THROW_ON_ERROR);
@@ -935,9 +935,8 @@ final class Converter
         string $operation,
         ?int $maxOutputBytes,
     ): void {
-        $this->assertBoundedFile($path, $workspace, $operation, $maxOutputBytes);
-        $size = \filesize($path);
-        $structureIsValid = \is_int($size) && match ($format) {
+        $size = $this->boundedFileSize($path, $workspace, $operation, $maxOutputBytes);
+        $structureIsValid = match ($format) {
             ImageFormat::PNG => $this->isPng($path, $size),
             ImageFormat::JPEG => $this->isJpeg($path, $size),
             ImageFormat::WEBP => $this->isWebp($path, $size),
