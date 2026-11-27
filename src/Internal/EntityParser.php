@@ -74,6 +74,7 @@ final class EntityParser
                 }
             }
         }
+        $selectedNames = $layers === null ? null : \array_fill_keys($layers, true);
         $entities = [];
         $counts = [];
         foreach ($data->OBJECTS as $record) {
@@ -82,11 +83,11 @@ final class EntityParser
                 $reason = Diagnostic::NON_OBJECT_RECORDS;
             } elseif ($kind === 'entity') {
                 $layer = null;
-                if ($layers !== null) {
+                if ($selectedNames !== null) {
                     $this->issues = [];
                     [$layerHandle, $target] = $this->reference($record->layer ?? null, 'layer', 'LAYER');
                     $name = $target->name ?? null;
-                    if (! \is_string($name) || $name === '' || ! \in_array($name, $layers, true)) {
+                    if (! \is_string($name) || $name === '' || ! isset($selectedNames[$name])) {
                         continue;
                     }
                     $layer = new DwgLayerReference($layerHandle, $name);

@@ -790,6 +790,19 @@ it('selects layers before materializing entities while retaining source diagnost
     [['Other', 'Other'], ['4']], [[[]], []], [['圖層'], []], [['other'], []], [[''], []], [['*'], []],
 ]);
 
+it('distinguishes numeric-looking layer names during selection', function (): void {
+    app()->instance(ProcessRunner::class, FakeProcessRunner::writesFile('drawing.json', nativeEntityDump([
+        ['object' => 'LAYER', 'handle' => [0, 1, 6], 'name' => '1'],
+        ['object' => 'LAYER', 'handle' => [0, 1, 7], 'name' => '01'],
+        nativeEntity(['layer' => [5, 1, 6, 6]]),
+        nativeEntity(['handle' => [0, 1, 4], 'layer' => [5, 1, 7, 7]]),
+    ])));
+    $reading = Dwg::entities(DwgBinary::from('AC1032 fixture'));
+
+    expect($reading->onlyLayers('1')->read()->entities->sole()->handle)->toBe('3')
+        ->and($reading->onlyLayers('01')->read()->entities->sole()->handle)->toBe('4');
+});
+
 it('rejects invalid layer lists before I/O', function (array $layers): void {
     $runner = FakeProcessRunner::writesFile('drawing.json', nativeEntityDump([]));
     app()->instance(ProcessRunner::class, $runner);
